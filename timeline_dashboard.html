@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SK HPC Services - GPU Booking Timeline</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group label {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .filter-group select, .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .gpu-section {
+            margin: 30px;
+        }
+        
+        .gpu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        
+        .gpu-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .gpu-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .timeline-container {
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .timeline-row {
+            display: flex;
+            align-items: center;
+            height: 40px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            position: relative;
+        }
+        
+        .instance-label {
+            width: 120px;
+            padding: 0 15px;
+            font-weight: 500;
+            color: #495057;
+            border-right: 1px solid #e9ecef;
+            background: white;
+        }
+        
+        .timeline-track {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .booking-block {
+            position: absolute;
+            height: 100%;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .booking-block:hover {
+            opacity: 0.8;
+        }
+        
+        .booking-active {
+            background: #28a745;
+        }
+        
+        .booking-scheduled {
+            background: #007bff;
+        }
+        
+        .booking-completed {
+            background: #6c757d;
+        }
+        
+        .time-axis {
+            height: 30px;
+            display: flex;
+            align-items: center;
+            border-top: 1px solid #e9ecef;
+            background: white;
+            font-size: 12px;
+            color: #6c757d;
+            position: relative;
+        }
+        
+        .time-marker {
+            position: absolute;
+            border-left: 1px solid #e9ecef;
+            height: 100%;
+            padding-left: 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            max-width: 250px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SK HPC Services</h1>
+            <p>GPU Booking Timeline Dashboard</p>
+        </div>
+        
+        <div class="controls">
+            <div class="filter-group">
+                <label for="dateRange">Date Range:</label>
+                <input type="date" id="startDate">
+                <span>to</span>
+                <input type="date" id="endDate">
+                
+                <label for="statusFilter">Status:</label>
+                <select id="statusFilter">
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="completed">Completed</option>
+                </select>
+                
+                <label for="modelFilter">GPU Model:</label>
+                <select id="modelFilter">
+                    <option value="all">All Models</option>
+                </select>
+                
+                <button onclick="updateTimeline()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Refresh</button>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalGPUs">0</div>
+                <div class="stat-label">Total GPU Instances</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="activeBookings">0</div>
+                <div class="stat-label">Active Bookings</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="utilizationRate">0%</div>
+                <div class="stat-label">Current Utilization</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalRevenue">$0</div>
+                <div class="stat-label">Total Revenue</div>
+            </div>
+        </div>
+        
+        <div id="timelineContainer"></div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color booking-active"></div>
+                <span>Active Booking</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color booking-scheduled"></div>
+                <span>Scheduled Booking</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color booking-completed"></div>
+                <span>Completed Booking</span>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tooltip" class="tooltip"></div>
+    
+    <script>
+        let gpuData = {};
+        let bookingsData = [];
+        
+        // Load data from JSON files
+        async function loadData() {
+            try {
+                const gpuResponse = await fetch('gpu_inventory.json');
+                gpuData = await gpuResponse.json();
+                
+                const bookingsResponse = await fetch('bookings.json');
+                bookingsData = await bookingsResponse.json();
+                
+                initializeFilters();
+                updateStats();
+                updateTimeline();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                // Fallback to embedded data if files are not accessible
+                loadEmbeddedData();
+            }
+        }
+        
+        function loadEmbeddedData() {
+            // Embedded data as fallback
+            gpuData = {
+                "gpu_models": {
+                    "RTX-4090": {
+                        "name": "NVIDIA GeForce RTX 4090",
+                        "instances": [
+                            {"id": "RTX4090-001", "status": "available"},
+                            {"id": "RTX4090-002", "status": "available"},
+                            {"id": "RTX4090-003", "status": "available"}
+                        ]
+                    },
+                    "H100": {
+                        "name": "NVIDIA H100 Tensor Core",
+                        "instances": [
+                            {"id": "H100-001", "status": "available"},
+                            {"id": "H100-002", "status": "available"}
+                        ]
+                    }
+                }
+            };
+            
+            bookingsData = [
+                {
+                    "booking_id": "book_001",
+                    "user_name": "Alice Johnson",
+                    "gpu_model": "H100",
+                    "gpu_id": "H100-001",
+                    "start_time": "2025-07-20T10:00:00Z",
+                    "end_time": "2025-07-20T18:00:00Z",
+                    "status": "active",
+                    "total_cost": 128.00
+                }
+            ];
+            
+            initializeFilters();
+            updateStats();
+            updateTimeline();
+        }
+        
+        function initializeFilters() {
+            // Set default date range
+            const today = new Date();
+            const startDate = new Date(today);
+            startDate.setDate(today.getDate() - 7);
+            const endDate = new Date(today);
+            endDate.setDate(today.getDate() + 7);
+            
+            document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+            document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+            
+            // Populate model filter
+            const modelFilter = document.getElementById('modelFilter');
+            Object.keys(gpuData.gpu_models).forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelFilter.appendChild(option);
+            });
+        }
+        
+        function updateStats() {
+            let totalGPUs = 0;
+            let activeBookings = 0;
+            let totalRevenue = 0;
+            
+            // Count total GPUs
+            Object.values(gpuData.gpu_models).forEach(model => {
+                totalGPUs += model.instances.length;
+            });
+            
+            // Count active bookings and calculate revenue
+            bookingsData.forEach(booking => {
+                if (booking.status === 'active') {
+                    activeBookings++;
+                }
+                totalRevenue += booking.total_cost + (booking.overtime_cost || 0);
+            });
+            
+            // Calculate utilization rate
+            const utilizationRate = totalGPUs > 0 ? Math.round((activeBookings / totalGPUs) * 100) : 0;
+            
+            document.getElementById('totalGPUs').textContent = totalGPUs;
+            document.getElementById('activeBookings').textContent = activeBookings;
+            document.getElementById('utilizationRate').textContent = utilizationRate + '%';
+            document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toFixed(2);
+        }
+        
+        function updateTimeline() {
+            const container = document.getElementById('timelineContainer');
+            container.innerHTML = '';
+            
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const statusFilter = document.getElementById('statusFilter').value;
+            const modelFilter = document.getElementById('modelFilter').value;
+            
+            // Filter bookings
+            const filteredBookings = bookingsData.filter(booking => {
+                const bookingStart = new Date(booking.start_time);
+                const bookingEnd = new Date(booking.end_time);
+                
+                if (bookingEnd < startDate || bookingStart > endDate) return false;
+                if (statusFilter !== 'all' && booking.status !== statusFilter) return false;
+                if (modelFilter !== 'all' && booking.gpu_model !== modelFilter) return false;
+                
+                return true;
+            });
+            
+            // Create timeline for each GPU model
+            Object.entries(gpuData.gpu_models).forEach(([modelKey, modelInfo]) => {
+                if (modelFilter !== 'all' && modelKey !== modelFilter) return;
+                
+                const section = document.createElement('div');
+                section.className = 'gpu-section';
+                
+                // Model header
+                const header = document.createElement('div');
+                header.className = 'gpu-header';
+                
+                const title = document.createElement('div');
+                title.className = 'gpu-title';
+                title.textContent = modelInfo.name;
+                
+                const stats = document.createElement('div');
+                stats.className = 'gpu-stats';
+                
+                const modelBookings = filteredBookings.filter(b => b.gpu_model === modelKey);
+                const activeCount = modelBookings.filter(b => b.status === 'active').length;
+                
+                stats.innerHTML = `
+                    <span>Instances: ${modelInfo.instances.length}</span>
+                    <span>Active: ${activeCount}</span>
+                    <span>Utilization: ${Math.round((activeCount / modelInfo.instances.length) * 100)}%</span>
+                `;
+                
+                header.appendChild(title);
+                header.appendChild(stats);
+                
+                // Timeline
+                const timelineContainer = document.createElement('div');
+                timelineContainer.className = 'timeline-container';
+                
+                const timeline = document.createElement('div');
+                timeline.className = 'timeline';
+                
+                // Create timeline for each instance
+                modelInfo.instances.forEach(instance => {
+                    const row = document.createElement('div');
+                    row.className = 'timeline-row';
+                    
+                    const label = document.createElement('div');
+                    label.className = 'instance-label';
+                    label.textContent = instance.id;
+                    
+                    const track = document.createElement('div');
+                    track.className = 'timeline-track';
+                    
+                    // Add bookings for this instance
+                    const instanceBookings = filteredBookings.filter(b => b.gpu_id === instance.id);
+                    instanceBookings.forEach(booking => {
+                        const bookingStart = new Date(booking.start_time);
+                        const bookingEnd = new Date(booking.end_time);
+                        
+                        // Calculate position and width
+                        const totalDuration = endDate - startDate;
+                        const startOffset = Math.max(0, bookingStart - startDate);
+                        const endOffset = Math.min(totalDuration, bookingEnd - startDate);
+                        
+                        const left = (startOffset / totalDuration) * 100;
+                        const width = ((endOffset - startOffset) / totalDuration) * 100;
+                        
+                        if (width > 0) {
+                            const block = document.createElement('div');
+                            block.className = `booking-block booking-${booking.status}`;
+                            block.style.left = left + '%';
+                            block.style.width = width + '%';
+                            block.textContent = booking.user_name.split(' ')[0];
+                            
+                            // Add tooltip
+                            block.addEventListener('mouseenter', (e) => showTooltip(e, booking));
+                            block.addEventListener('mouseleave', hideTooltip);
+                            
+                            track.appendChild(block);
+                        }
+                    });
+                    
+                    row.appendChild(label);
+                    row.appendChild(track);
+                    timeline.appendChild(row);
+                });
+                
+                // Time axis
+                const timeAxis = createTimeAxis(startDate, endDate);
+                
+                timelineContainer.appendChild(timeline);
+                timelineContainer.appendChild(timeAxis);
+                
+                section.appendChild(header);
+                section.appendChild(timelineContainer);
+                container.appendChild(section);
+            });
+        }
+        
+        function createTimeAxis(startDate, endDate) {
+            const axis = document.createElement('div');
+            axis.className = 'time-axis';
+            
+            const duration = endDate - startDate;
+            const dayCount = duration / (1000 * 60 * 60 * 24);
+            
+            for (let i = 0; i <= dayCount; i++) {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + i);
+                
+                const marker = document.createElement('div');
+                marker.className = 'time-marker';
+                marker.style.left = (i / dayCount) * 100 + '%';
+                marker.textContent = date.toLocaleDateString();
+                
+                axis.appendChild(marker);
+            }
+            
+            return axis;
+        }
+        
+        function showTooltip(event, booking) {
+            const tooltip = document.getElementById('tooltip');
+            const startTime = new Date(booking.start_time).toLocaleString();
+            const endTime = new Date(booking.end_time).toLocaleString();
+            
+            tooltip.innerHTML = `
+                <strong>${booking.user_name}</strong><br>
+                GPU: ${booking.gpu_id}<br>
+                Start: ${startTime}<br>
+                End: ${endTime}<br>
+                Status: ${booking.status}<br>
+                Cost: $${booking.total_cost}
+            `;
+            
+            tooltip.style.display = 'block';
+            tooltip.style.left = event.pageX + 10 + 'px';
+            tooltip.style.top = event.pageY - 50 + 'px';
+        }
+        
+        function hideTooltip() {
+            document.getElementById('tooltip').style.display = 'none';
+        }
+        
+        // Initialize the dashboard
+        loadData();
+    </script>
+</body>
+</html>

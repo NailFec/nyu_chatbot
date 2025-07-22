@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SK HPC Services - AI Chatbot</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .chat-header h1 {
+            margin: 0;
+            font-size: 1.8em;
+            font-weight: 300;
+        }
+        
+        .chat-header p {
+            margin: 5px 0 0 0;
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        
+        .message.user {
+            background: #007bff;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        
+        .message.bot {
+            background: #f1f3f4;
+            color: #333;
+            align-self: flex-start;
+            border: 1px solid #e1e3e4;
+        }
+        
+        .message.system {
+            background: #e8f5e8;
+            color: #2d5a2d;
+            align-self: center;
+            font-style: italic;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid #e1e3e4;
+            background: #f8f9fa;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+        }
+        
+        .input-group input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        .input-group button {
+            padding: 12px 24px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        
+        .input-group button:hover {
+            background: #0056b3;
+        }
+        
+        .input-group button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            padding: 12px 16px;
+            background: #f1f3f4;
+            border-radius: 18px;
+            border: 1px solid #e1e3e4;
+        }
+        
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            background: #999;
+            border-radius: 50%;
+            animation: typing 1.5s infinite;
+        }
+        
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .quick-action {
+            padding: 8px 16px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .quick-action:hover {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .navbar {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .nav-button {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-left: 10px;
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .nav-button:hover {
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="timeline_dashboard.html" class="nav-button">Dashboard</a>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>SK HPC Services AI Assistant</h1>
+            <p>Your intelligent helper for GPU bookings and HPC services</p>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message system">
+                Welcome to SK (Shame Kitten) HPC Services! I'm here to help you with GPU bookings, queries, and recommendations. How can I assist you today?
+            </div>
+            
+            <div class="quick-actions">
+                <div class="quick-action" onclick="sendQuickMessage('Hello, what services do you offer?')">
+                    What services do you offer?
+                </div>
+                <div class="quick-action" onclick="sendQuickMessage('I want to book a GPU for AI training')">
+                    Book GPU for AI training
+                </div>
+                <div class="quick-action" onclick="sendQuickMessage('What GPU models are available?')">
+                    Available GPU models
+                </div>
+                <div class="quick-action" onclick="sendQuickMessage('Check my booking status')">
+                    Check booking status
+                </div>
+                <div class="quick-action" onclick="sendQuickMessage('Get pricing information')">
+                    Pricing information
+                </div>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+        
+        <div class="chat-input">
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Type your message here..." maxlength="1000">
+                <button id="sendButton" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const messageInput = document.getElementById('messageInput');
+        const chatMessages = document.getElementById('chatMessages');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        // Auto-focus on input
+        messageInput.focus();
+        
+        // Handle Enter key
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        function sendQuickMessage(message) {
+            messageInput.value = message;
+            sendMessage();
+        }
+        
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Clear input and disable button
+            messageInput.value = '';
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            try {
+                // In a real implementation, this would call the API
+                // For now, we'll simulate the chatbot response
+                const response = await simulateChatbotResponse(message);
+                
+                // Hide typing indicator
+                hideTypingIndicator();
+                
+                // Add bot response to chat
+                addMessage(response, 'bot');
+                
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('I apologize, but I encountered an error. Please try again.', 'bot');
+                console.error('Chat error:', error);
+            }
+            
+            // Re-enable button
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send';
+            messageInput.focus();
+        }
+        
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            typingIndicator.style.display = 'block';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function hideTypingIndicator() {
+            typingIndicator.style.display = 'none';
+        }
+        
+        // Simulate chatbot responses (replace with actual API call)
+        async function simulateChatbotResponse(message) {
+            // Simulate network delay
+            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+            
+            const lowerMessage = message.toLowerCase();
+            
+            if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+                return "Hello! I'm the AI assistant for SK (Shame Kitten) HPC Services. We provide affordable, reliable, and high-performance GPU rental services. How can I help you today?";
+            }
+            
+            if (lowerMessage.includes('services') || lowerMessage.includes('offer')) {
+                return "SK (Shame Kitten) HPC Services offers:\n\n• GPU rental for AI/ML training and inference\n• High-performance computing resources\n• Various GPU models: RTX-4090, RTX-4080, H100, A100, V100\n• Flexible booking options\n• 24/7 support\n• Competitive pricing\n\nWhat specific service are you interested in?";
+            }
+            
+            if (lowerMessage.includes('gpu') && lowerMessage.includes('available')) {
+                return "We have the following GPU models available:\n\n• NVIDIA H100 (80GB HBM3) - $8.00/30min - Best for large AI models\n• NVIDIA A100 (40GB HBM2e) - $5.00/30min - Professional AI training\n• RTX-4090 (24GB GDDR6X) - $2.50/30min - Excellent for gaming/content creation\n• RTX-4080 (16GB GDDR6X) - $2.00/30min - High-performance mainstream\n• RTX-4070 (12GB GDDR6X) - $1.50/30min - Great value option\n\nWhich GPU model interests you most?";
+            }
+            
+            if (lowerMessage.includes('book') || lowerMessage.includes('reserve')) {
+                return "I'd be happy to help you book a GPU! To get started, I need to know:\n\n1. What will you be using the GPU for? (AI training, gaming, rendering, etc.)\n2. Any specific performance requirements?\n3. Your preferred time and duration?\n\nThis information will help me recommend the best GPU model for your needs.";
+            }
+            
+            if (lowerMessage.includes('pricing') || lowerMessage.includes('price') || lowerMessage.includes('cost')) {
+                return "Here's our pricing structure:\n\n• RTX-4070: $1.50 per 30 minutes\n• RTX-4080: $2.00 per 30 minutes\n• RTX-4090: $2.50 per 30 minutes\n• RTX-3080: $1.30 per 30 minutes\n• RTX-3090: $1.80 per 30 minutes\n• V100: $3.00 per 30 minutes\n• A100: $5.00 per 30 minutes\n• H100: $8.00 per 30 minutes\n\nOvertime charges apply at 1.4x-2.0x rates. Would you like a recommendation based on your budget?";
+            }
+            
+            if (lowerMessage.includes('llama') || lowerMessage.includes('8b')) {
+                return "For LLaMA 8B model training/inference, I recommend:\n\n1. **RTX-4090** (24GB VRAM) - $2.50/30min\n   • Excellent performance for 8B models\n   • Great value for money\n   • Supports full precision training\n\n2. **A100** (40GB VRAM) - $5.00/30min\n   • Professional grade with tensor cores\n   • Better for larger batch sizes\n   • Multi-instance GPU support\n\nThe RTX-4090 is usually sufficient for 8B models. Which would you prefer?";
+            }
+            
+            if (lowerMessage.includes('status') || lowerMessage.includes('booking')) {
+                return "To check your booking status, I'll need either:\n\n• Your booking hash/ID\n• Your email address\n• Your booking reference number\n\nPlease provide one of these so I can look up your booking information.";
+            }
+            
+            // Default response
+            return "I understand you're asking about '" + message + "'. Let me help you with that. Could you please provide more specific details about what you'd like to know? I can assist with GPU bookings, pricing, technical specifications, or account management.";
+        }
+        
+        // Real API call function (commented out for standalone demo)
+        /*
+        async function callChatAPI(message) {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            
+            const data = await response.json();
+            return data.response;
+        }
+        */
+    </script>
+</body>
+</html>

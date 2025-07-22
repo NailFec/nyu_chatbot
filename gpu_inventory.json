@@ -1,0 +1,169 @@
+{
+  "gpu_models": {
+    "RTX-4090": {
+      "name": "NVIDIA GeForce RTX 4090",
+      "memory": "24GB GDDR6X",
+      "description": "Flagship gaming and content creation GPU with exceptional ray tracing performance. Perfect for AI training, 3D rendering, and high-end gaming. Features Ada Lovelace architecture with massive CUDA cores.",
+      "price_per_30min": 2.50,
+      "overtime_multiplier": 1.5,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "8.9",
+      "cuda_cores": 16384,
+      "instances": [
+        {"id": "RTX4090-001", "status": "available"},
+        {"id": "RTX4090-002", "status": "available"},
+        {"id": "RTX4090-003", "status": "available"},
+        {"id": "RTX4090-004", "status": "available"},
+        {"id": "RTX4090-005", "status": "available"}
+      ]
+    },
+    "RTX-4080": {
+      "name": "NVIDIA GeForce RTX 4080",
+      "memory": "16GB GDDR6X",
+      "description": "High-performance GPU ideal for 4K gaming, content creation, and medium-scale AI workloads. Excellent balance of performance and efficiency with Ada Lovelace architecture.",
+      "price_per_30min": 2.00,
+      "overtime_multiplier": 1.5,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "8.9",
+      "cuda_cores": 9728,
+      "instances": [
+        {"id": "RTX4080-001", "status": "available"},
+        {"id": "RTX4080-002", "status": "available"},
+        {"id": "RTX4080-003", "status": "available"},
+        {"id": "RTX4080-004", "status": "available"},
+        {"id": "RTX4080-005", "status": "available"},
+        {"id": "RTX4080-006", "status": "available"},
+        {"id": "RTX4080-007", "status": "available"}
+      ]
+    },
+    "RTX-4070": {
+      "name": "NVIDIA GeForce RTX 4070",
+      "memory": "12GB GDDR6X",
+      "description": "Mainstream performance GPU perfect for 1440p gaming and light AI workloads. Great value for money with modern features like DLSS 3 and ray tracing support.",
+      "price_per_30min": 1.50,
+      "overtime_multiplier": 1.5,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "8.9",
+      "cuda_cores": 5888,
+      "instances": [
+        {"id": "RTX4070-001", "status": "available"},
+        {"id": "RTX4070-002", "status": "available"},
+        {"id": "RTX4070-003", "status": "available"},
+        {"id": "RTX4070-004", "status": "available"},
+        {"id": "RTX4070-005", "status": "available"},
+        {"id": "RTX4070-006", "status": "available"},
+        {"id": "RTX4070-007", "status": "available"},
+        {"id": "RTX4070-008", "status": "available"},
+        {"id": "RTX4070-009", "status": "available"},
+        {"id": "RTX4070-010", "status": "available"}
+      ]
+    },
+    "H100": {
+      "name": "NVIDIA H100 Tensor Core",
+      "memory": "80GB HBM3",
+      "description": "Enterprise-grade GPU designed for large-scale AI training and inference. Features Hopper architecture with exceptional performance for transformer models, LLMs, and scientific computing.",
+      "price_per_30min": 8.00,
+      "overtime_multiplier": 2.0,
+      "min_booking_time": 60,
+      "time_unit": 30,
+      "compute_capability": "9.0",
+      "cuda_cores": 16896,
+      "instances": [
+        {"id": "H100-001", "status": "available"},
+        {"id": "H100-002", "status": "available"},
+        {"id": "H100-003", "status": "available"}
+      ]
+    },
+    "A100": {
+      "name": "NVIDIA A100 Tensor Core",
+      "memory": "40GB HBM2e",
+      "description": "Professional AI acceleration GPU with excellent performance for deep learning training and inference. Ampere architecture with multi-instance GPU capability for flexible resource allocation.",
+      "price_per_30min": 5.00,
+      "overtime_multiplier": 1.8,
+      "min_booking_time": 60,
+      "time_unit": 30,
+      "compute_capability": "8.0",
+      "cuda_cores": 6912,
+      "instances": [
+        {"id": "A100-001", "status": "available"},
+        {"id": "A100-002", "status": "available"},
+        {"id": "A100-003", "status": "available"},
+        {"id": "A100-004", "status": "available"}
+      ]
+    },
+    "V100": {
+      "name": "NVIDIA Tesla V100",
+      "memory": "32GB HBM2",
+      "description": "Reliable datacenter GPU for AI training and scientific computing. Volta architecture with tensor cores for accelerated mixed-precision workloads. Cost-effective option for established workflows.",
+      "price_per_30min": 3.00,
+      "overtime_multiplier": 1.6,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "7.0",
+      "cuda_cores": 5120,
+      "instances": [
+        {"id": "V100-001", "status": "available"},
+        {"id": "V100-002", "status": "available"},
+        {"id": "V100-003", "status": "available"},
+        {"id": "V100-004", "status": "available"},
+        {"id": "V100-005", "status": "available"},
+        {"id": "V100-006", "status": "available"}
+      ]
+    },
+    "RTX-3090": {
+      "name": "NVIDIA GeForce RTX 3090",
+      "memory": "24GB GDDR6X",
+      "description": "Previous generation flagship with large memory capacity. Still excellent for AI development and content creation. Great value for workloads requiring large VRAM without latest features.",
+      "price_per_30min": 1.80,
+      "overtime_multiplier": 1.4,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "8.6",
+      "cuda_cores": 10496,
+      "instances": [
+        {"id": "RTX3090-001", "status": "available"},
+        {"id": "RTX3090-002", "status": "available"},
+        {"id": "RTX3090-003", "status": "available"},
+        {"id": "RTX3090-004", "status": "available"},
+        {"id": "RTX3090-005", "status": "available"},
+        {"id": "RTX3090-006", "status": "available"},
+        {"id": "RTX3090-007", "status": "available"},
+        {"id": "RTX3090-008", "status": "available"}
+      ]
+    },
+    "RTX-3080": {
+      "name": "NVIDIA GeForce RTX 3080",
+      "memory": "10GB GDDR6X",
+      "description": "Popular mid-range GPU with excellent performance per dollar. Ampere architecture with good ray tracing and DLSS support. Ideal for moderate AI workloads and high-end gaming.",
+      "price_per_30min": 1.30,
+      "overtime_multiplier": 1.4,
+      "min_booking_time": 30,
+      "time_unit": 30,
+      "compute_capability": "8.6",
+      "cuda_cores": 8704,
+      "instances": [
+        {"id": "RTX3080-001", "status": "available"},
+        {"id": "RTX3080-002", "status": "available"},
+        {"id": "RTX3080-003", "status": "available"},
+        {"id": "RTX3080-004", "status": "available"},
+        {"id": "RTX3080-005", "status": "available"},
+        {"id": "RTX3080-006", "status": "available"},
+        {"id": "RTX3080-007", "status": "available"},
+        {"id": "RTX3080-008", "status": "available"},
+        {"id": "RTX3080-009", "status": "available"},
+        {"id": "RTX3080-010", "status": "available"},
+        {"id": "RTX3080-011", "status": "available"},
+        {"id": "RTX3080-012", "status": "available"}
+      ]
+    }
+  },
+  "default_configs": {
+    "storage_gb": 128,
+    "memory_gb": 32,
+    "cpu_cores": 8,
+    "network_speed": "10Gbps"
+  }
+}
