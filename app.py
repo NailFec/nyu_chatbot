@@ -236,7 +236,7 @@ def debug_sessions():
 def api_docs():
     """API文档"""
     return jsonify({
-        "version": "2.0",
+        "version": "2.1",
         "session_apis": {
             "/api/chat": "POST - 带会话的聊天",
             "/api/session/clear": "POST - 清除会话"
