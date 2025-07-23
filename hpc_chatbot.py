@@ -12,7 +12,7 @@ class HPC_ChatBot:
     Provides AI-powered assistance for GPU booking, querying, and management
     """
     
-    def __init__(self):
+    def __init__(self, session_id=None):
         """Initialize the chatbot with API client and load data"""
         self.client = OpenAI(
             api_key=nailfec.api_key,
@@ -26,7 +26,8 @@ class HPC_ChatBot:
         with open('bookings.json', 'r') as f:
             self.bookings = json.load(f)
         
-        # Conversation history
+        # Session-specific conversation history
+        self.session_id = session_id or hashlib.md5(str(datetime.datetime.now()).encode()).hexdigest()
         self.conversation_history = []
         
         # Current booking session data
@@ -450,7 +451,7 @@ class HPC_ChatBot:
         # Prepare system message
         system_message = {
             "role": "system",
-            "content": """You are an AI assistant for SK (Shame Kitten) HPC Services, a company that provides high-performance computing GPU rental services. 
+            "content": """You are an AI assistant for SK (Shame Kitten) HPC Services, a company that provides high-performance computing GPU rental services.
 
 Your role is to help users with:
 1. Booking GPU instances for various workloads
@@ -461,9 +462,11 @@ Your role is to help users with:
 
 Company information:
 - SK (Shame Kitten) offers affordable, reliable, and stable HPC services
+- Our company name comes from a cute student called Shane, and he is as cute as a kitten and always shame
 - We have various GPU models available: RTX-4090, RTX-4080, RTX-4070, RTX-3090, RTX-3080, H100, A100, V100
 - Our services are cost-effective with excellent connectivity
 - We support various use cases from gaming to AI training to scientific computing
+- If the user want to turn to human response, show the E-mail nailfec17@gmail.com for user to connect with
 
 Guidelines:
 - Always be helpful, professional, and simple
@@ -471,6 +474,7 @@ Guidelines:
 - Use function calls to access real data when needed
 - Never provide fixed responses - always process through AI
 - Guide users through the booking process step by step
+- Do not say anything that is not related to your assistant role about GPU and our company
 - IMPORTANT: Just reply 1~3 sentences is enough - do not give too much responses
 - IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose"""
         }
