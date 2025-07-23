@@ -25,29 +25,30 @@ memory_sessions = {}  # 内存存储备用
 
 def get_or_create_chatbot(session_id):
     """获取或创建新的 chatbot 实例"""
-    # 检查是否已有实例
-    if USE_REDIS:
-        try:
+    with lock:
+        if USE_REDIS:
             chatbot_pickle = redis_client.get(f'chatbot:{session_id}')
             if chatbot_pickle:
-                return pickle.loads(chatbot_pickle)
-        except Exception as e:
-            print(f"Failed to deserialize chatbot from Redis: {e}")
-    else:
-        if session_id in memory_sessions:
-            return memory_sessions[session_id]
-    
-    # 创建新实例
-    chatbot = HPC_ChatBot(session_id)
-    save_chatbot(session_id, chatbot)
-    return chatbot
+                try:
+                    return pickle.loads(chatbot_pickle)
+                except:
+                    pass
+        else:
+            if session_id in memory_sessions:
+                return memory_sessions[session_id]
+        
+        # 创建新实例
+        chatbot = HPC_ChatBot(session_id)
+        save_chatbot(session_id, chatbot)
+        return chatbot
 
 def save_chatbot(session_id, chatbot):
     """保存 chatbot 状态"""
-    if USE_REDIS:
-        redis_client.setex(f'chatbot:{session_id}', 3600, pickle.dumps(chatbot))
-    else:
-        memory_sessions[session_id] = chatbot
+    with lock:
+        if USE_REDIS:
+            redis_client.setex(f'chatbot:{session_id}', 3600, pickle.dumps(chatbot))
+        else:
+            memory_sessions[session_id] = chatbot
 
 # ===============================
 # 前端页面路由
@@ -62,11 +63,6 @@ def dashboard():
     """数据仪表板"""
     return send_file('timeline_dashboard.html')
 
-@app.route('/test')
-def test_chat():
-    """简单聊天测试页面"""
-    return send_file('test_chat.html')
-
 @app.route('/favicon.ico')
 def favicon():
     """网站图标"""
@@ -79,24 +75,21 @@ def favicon():
 @app.route('/api/chat', methods=['POST'])
 def chat_with_session():
     """带会话管理的聊天API"""
+    if 'session_id' not in session:
+        session['session_id'] = secrets.token_hex(16)
+    
+    session_id = session['session_id']
+    data = request.get_json()
+    
+    if not data or 'message' not in data:
+        return jsonify({'error': 'No message provided'}), 400
+    
     try:
-        if 'session_id' not in session:
-            session['session_id'] = secrets.token_hex(16)
-        
-        session_id = session['session_id']
-        data = request.get_json()
-        
-        if not data or 'message' not in data:
-            return jsonify({'error': 'No message provided'}), 400
-        
         chatbot = get_or_create_chatbot(session_id)
         response = chatbot.send_message_to_ai(data['message'])
         save_chatbot(session_id, chatbot)
         return jsonify({'response': response})
     except Exception as e:
-        print(f"Flask API Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 # ===============================

@@ -318,13 +318,13 @@
         let gpuData = {};
         let bookingsData = [];
         
-        // Load data from JSON files
+        // Load data from API endpoints
         async function loadData() {
             try {
-                const gpuResponse = await fetch('gpu_inventory.json');
+                const gpuResponse = await fetch('/api/gpu_inventory');
                 gpuData = await gpuResponse.json();
                 
-                const bookingsResponse = await fetch('bookings.json');
+                const bookingsResponse = await fetch('/api/bookings');
                 bookingsData = await bookingsResponse.json();
                 
                 initializeFilters();

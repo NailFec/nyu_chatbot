@@ -21,7 +21,8 @@ class HPC_ChatBot:
         """Initialize the chatbot with API client and load data"""
         self.client = OpenAI(
             api_key=nailfec.api_key,
-            base_url="https://api.deepseek.com"
+            base_url="https://api.deepseek.com",
+            timeout=30.0  # 添加30秒超时
         )
         
         # Load GPU inventory and bookings data
@@ -37,6 +38,10 @@ class HPC_ChatBot:
         
         # Current booking session data
         self.current_booking = {}
+        
+        # Pending operations awaiting confirmation
+        self.pending_operation = None
+        self.pending_data = {}
         
         # Define available functions for the AI
         self.tools = [
@@ -223,6 +228,69 @@ class HPC_ChatBot:
                 "function": {
                     "name": "get_current_datetime",
                     "description": "Get the current date and time. Use this when users mention 'today', 'now', 'right now', 'current time', or need to book something immediately.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "prepare_booking_confirmation",
+                    "description": "Prepare booking details for user confirmation before creating the actual booking. Call this when all booking information is collected.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "gpu_model": {"type": "string", "description": "GPU model to book"},
+                            "gpu_id": {"type": "string", "description": "Specific GPU instance ID (optional)"},
+                            "user_name": {"type": "string", "description": "User's full name"},
+                            "user_email": {"type": "string", "description": "User's email address"},
+                            "start_time": {"type": "string", "description": "Start time in ISO format"},
+                            "end_time": {"type": "string", "description": "End time in ISO format"},
+                            "storage_gb": {"type": "number", "description": "Required storage in GB (default: 128)"},
+                            "memory_gb": {"type": "number", "description": "Required system memory in GB (default: 32)"},
+                            "cpu_cores": {"type": "number", "description": "Required CPU cores (default: 8)"}
+                        },
+                        "required": ["gpu_model", "user_name", "user_email", "start_time", "end_time"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "prepare_cancellation_confirmation",
+                    "description": "Prepare cancellation details for user confirmation before cancelling the booking. Call this when booking hash and email are collected.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "booking_hash": {"type": "string", "description": "Booking hash identifier"},
+                            "user_email": {"type": "string", "description": "User's email for verification"}
+                        },
+                        "required": ["booking_hash", "user_email"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "confirm_operation",
+                    "description": "Confirm and execute the pending operation (booking or cancellation) after user confirmation.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "confirmed": {"type": "boolean", "description": "Whether the user confirmed the operation"}
+                        },
+                        "required": ["confirmed"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "clear_conversation_history",
+                    "description": "Clear the conversation history to start fresh after completing an operation.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -921,6 +989,296 @@ class HPC_ChatBot:
             "second": now.second
         }
 
+    def prepare_booking_confirmation(self, gpu_model: str, gpu_id: str = None, user_name: str = None, 
+                                   user_email: str = None, start_time: str = None, end_time: str = None, 
+                                   storage_gb: int = 128, memory_gb: int = 32, cpu_cores: int = 8) -> Dict:
+        """Prepare booking details for user confirmation"""
+        
+        # Validate all required parameters
+        if not gpu_model or not user_name or not user_email or not start_time or not end_time:
+            return {"success": False, "message": "All booking information is required: GPU model, user name, email, start time, and end time"}
+        
+        # Validate email format
+        if "@" not in user_email or "." not in user_email:
+            return {"success": False, "message": "Invalid email format"}
+        
+        # Validate user name
+        if not user_name.strip():
+            return {"success": False, "message": "User name cannot be empty"}
+        
+        # Validate GPU model exists
+        if gpu_model not in self.gpu_data["gpu_models"]:
+            return {"success": False, "message": f"GPU model '{gpu_model}' not found in inventory"}
+        
+        # Auto-select GPU ID if not provided
+        if not gpu_id:
+            gpu_id = self.get_available_gpu_id(gpu_model, start_time, end_time)
+            if not gpu_id:
+                return {"success": False, "message": f"No available {gpu_model} GPUs found for the requested time period"}
+        
+        # Validate time format and logic
+        try:
+            start_dt = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = datetime.datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            
+            if start_dt >= end_dt:
+                return {"success": False, "message": "End time must be after start time"}
+            
+            if start_dt < datetime.datetime.now(datetime.timezone.utc):
+                return {"success": False, "message": "Start time cannot be in the past"}
+                
+        except ValueError:
+            return {"success": False, "message": "Invalid time format. Please use ISO format (e.g., '2025-07-23T10:00:00Z')"}
+        
+        # Calculate cost
+        gpu_info = self.gpu_data["gpu_models"][gpu_model]
+        duration_hours = (end_dt - start_dt).total_seconds() / 3600
+        duration_slots = duration_hours * 2  # 30-minute slots
+        total_cost = duration_slots * gpu_info["price_per_30min"]
+        
+        # Store pending operation data
+        self.pending_operation = "booking"
+        self.pending_data = {
+            "gpu_model": gpu_model,
+            "gpu_id": gpu_id,
+            "user_name": user_name.strip(),
+            "user_email": user_email.lower().strip(),
+            "start_time": start_time,
+            "end_time": end_time,
+            "storage_gb": storage_gb,
+            "memory_gb": memory_gb,
+            "cpu_cores": cpu_cores,
+            "total_cost": round(total_cost, 2),
+            "duration_hours": duration_hours
+        }
+        
+        # Generate confirmation markdown
+        confirmation_markdown = f"""
+## 📋 **Booking Confirmation Required**
+
+Please review the following booking details carefully:
+
+### 👤 **User Information**
+- **Name:** {user_name}
+- **Email:** {user_email}
+
+### 🖥️ **GPU & Resources**
+- **GPU Model:** **{gpu_model}** 
+- **GPU ID:** `{gpu_id}`
+- **GPU Memory:** {gpu_info['memory']}
+- **System Memory:** {memory_gb} GB
+- **Storage:** {storage_gb} GB  
+- **CPU Cores:** {cpu_cores}
+
+### ⏰ **Schedule**
+- **Start Time:** {start_dt.strftime('%Y-%m-%d %H:%M:%S')}
+- **End Time:** {end_dt.strftime('%Y-%m-%d %H:%M:%S')}
+- **Duration:** {duration_hours:.1f} hours
+
+### 💰 **Billing**
+- **Rate:** ${gpu_info['price_per_30min']:.2f} per 30 minutes
+- **Total Cost:** **${total_cost:.2f}**
+
+---
+
+**Please type 'yes' or 'confirm' to proceed with this booking, or 'no' to cancel.**
+"""
+        
+        return {
+            "success": True,
+            "confirmation_needed": True,
+            "markdown_summary": confirmation_markdown
+        }
+
+    def prepare_cancellation_confirmation(self, booking_hash: str, user_email: str) -> Dict:
+        """Prepare cancellation details for user confirmation"""
+        
+        # Validate required parameters
+        if not booking_hash or not user_email:
+            return {"success": False, "message": "Both booking hash and user email are required"}
+        
+        # Validate email format
+        if "@" not in user_email or "." not in user_email:
+            return {"success": False, "message": "Invalid email format"}
+        
+        # Find the booking
+        booking_found = None
+        for booking in self.bookings:
+            if (booking["booking_hash"] == booking_hash and 
+                booking["user_email"].lower().strip() == user_email.lower().strip()):
+                booking_found = booking
+                break
+        
+        if not booking_found:
+            return {"success": False, "message": "Booking not found or email/hash combination is incorrect"}
+        
+        if booking_found["status"] not in ["scheduled", "active"]:
+            return {"success": False, "message": "Booking cannot be cancelled (already completed or cancelled)"}
+        
+        # Store pending operation data
+        self.pending_operation = "cancellation"
+        self.pending_data = {
+            "booking_hash": booking_hash,
+            "user_email": user_email.lower().strip(),
+            "booking": booking_found
+        }
+        
+        # Generate confirmation markdown
+        start_time = datetime.datetime.fromisoformat(booking_found["start_time"].replace('Z', '+00:00'))
+        end_time = datetime.datetime.fromisoformat(booking_found["end_time"].replace('Z', '+00:00'))
+        
+        confirmation_markdown = f"""
+## ❌ **Cancellation Confirmation Required**
+
+Please review the booking you want to cancel:
+
+### 📄 **Booking Details**
+- **Booking ID:** {booking_found['booking_id']}
+- **Booking Hash:** `{booking_hash}`
+
+### 👤 **User Information**
+- **Name:** {booking_found['user_name']}
+- **Email:** {booking_found['user_email']}
+
+### 🖥️ **GPU Information**
+- **GPU Model:** **{booking_found['gpu_model']}**
+- **GPU ID:** `{booking_found['gpu_id']}`
+
+### ⏰ **Schedule**
+- **Start Time:** {start_time.strftime('%Y-%m-%d %H:%M:%S')}
+- **End Time:** {end_time.strftime('%Y-%m-%d %H:%M:%S')}
+- **Status:** {booking_found['status'].upper()}
+
+### 💰 **Billing**
+- **Total Cost:** ${booking_found['total_cost']:.2f}
+
+---
+
+**⚠️ Warning: This action cannot be undone.**
+
+**Please type 'yes' or 'confirm' to proceed with cancellation, or 'no' to keep the booking.**
+"""
+        
+        return {
+            "success": True,
+            "confirmation_needed": True,
+            "markdown_summary": confirmation_markdown
+        }
+
+    def confirm_operation(self, confirmed: bool) -> Dict:
+        """Confirm and execute the pending operation"""
+        
+        if not self.pending_operation:
+            return {"success": False, "message": "No pending operation to confirm"}
+        
+        if not confirmed:
+            # User declined, clear pending operation
+            operation_type = self.pending_operation
+            self.pending_operation = None
+            self.pending_data = {}
+            return {
+                "success": True, 
+                "message": f"{operation_type.capitalize()} cancelled by user request.",
+                "cancelled": True
+            }
+        
+        # User confirmed, execute the operation
+        if self.pending_operation == "booking":
+            result = self._execute_confirmed_booking()
+        elif self.pending_operation == "cancellation":
+            result = self._execute_confirmed_cancellation()
+        else:
+            return {"success": False, "message": f"Unknown operation type: {self.pending_operation}"}
+        
+        # Clear pending operation
+        self.pending_operation = None
+        self.pending_data = {}
+        
+        return result
+
+    def _execute_confirmed_booking(self) -> Dict:
+        """Execute the confirmed booking operation"""
+        data = self.pending_data
+        
+        # Generate booking ID and hash
+        booking_id = f"book_{len(self.bookings) + 1:03d}"
+        booking_hash = hashlib.md5(f"{booking_id}{data['user_email']}{data['start_time']}".encode()).hexdigest()
+        
+        # Create booking
+        new_booking = {
+            "booking_id": booking_id,
+            "booking_hash": booking_hash,
+            "user_name": data["user_name"],
+            "user_email": data["user_email"],
+            "gpu_model": data["gpu_model"],
+            "gpu_id": data["gpu_id"],
+            "start_time": data["start_time"],
+            "end_time": data["end_time"],
+            "status": "scheduled",
+            "storage_gb": data["storage_gb"],
+            "memory_gb": data["memory_gb"],
+            "cpu_cores": data["cpu_cores"],
+            "created_at": datetime.datetime.now().isoformat() + "Z",
+            "total_cost": data["total_cost"],
+            "overtime_minutes": 0,
+            "overtime_cost": 0.00
+        }
+        
+        self.bookings.append(new_booking)
+        
+        # Save to file
+        with open('bookings.json', 'w') as f:
+            json.dump(self.bookings, f, indent=2)
+        
+        # Display booking card
+        self.display_booking_card(new_booking, is_cancelled=False)
+        
+        return {
+            "success": True,
+            "booking": new_booking,
+            "message": "Booking created successfully! A booking card has been generated and opened in your browser.",
+            "clear_history": True
+        }
+
+    def _execute_confirmed_cancellation(self) -> Dict:
+        """Execute the confirmed cancellation operation"""
+        data = self.pending_data
+        booking_hash = data["booking_hash"]
+        user_email = data["user_email"]
+        
+        # Find and cancel the booking
+        for i, booking in enumerate(self.bookings):
+            if (booking["booking_hash"] == booking_hash and 
+                booking["user_email"] == user_email):
+                self.bookings[i]["status"] = "cancelled"
+                
+                # Save to file
+                with open('bookings.json', 'w') as f:
+                    json.dump(self.bookings, f, indent=2)
+                
+                # Display cancellation card
+                self.display_booking_card(self.bookings[i], is_cancelled=True)
+                
+                return {
+                    "success": True,
+                    "message": "Booking cancelled successfully! A cancellation card has been generated and opened in your browser.",
+                    "clear_history": True
+                }
+        
+        return {"success": False, "message": "Booking not found during cancellation"}
+
+    def clear_conversation_history(self) -> Dict:
+        """Clear the conversation history to start fresh"""
+        self.conversation_history = []
+        self.pending_operation = None
+        self.pending_data = {}
+        self.current_booking = {}
+        
+        return {
+            "success": True,
+            "message": "Conversation history cleared. Starting fresh!"
+        }
+
     def markdown_to_html(self, text: str) -> str:
         """Convert markdown text to HTML with custom styling"""
         # Configure markdown with extensions
@@ -971,7 +1329,11 @@ class HPC_ChatBot:
             "query_booking_info": self.query_booking_info,
             "cancel_booking": self.cancel_booking,
             "calculate_billing": self.calculate_billing,
-            "get_current_datetime": self.get_current_datetime
+            "get_current_datetime": self.get_current_datetime,
+            "prepare_booking_confirmation": self.prepare_booking_confirmation,
+            "prepare_cancellation_confirmation": self.prepare_cancellation_confirmation,
+            "confirm_operation": self.confirm_operation,
+            "clear_conversation_history": self.clear_conversation_history
         }
         
         if function_name in function_map:
@@ -1043,6 +1405,21 @@ CANCELLATION SECURITY REQUIREMENTS:
 - If either piece of information is missing or incorrect, deny the cancellation request
 - Always verify the booking exists and belongs to the requesting user
 
+CONFIRMATION WORKFLOW (CRITICAL):
+- NEVER call create_booking or cancel_booking directly
+- Instead, when all information is collected:
+  * For bookings: Call prepare_booking_confirmation to show a Markdown summary for user confirmation
+  * For cancellations: Call prepare_cancellation_confirmation to show a Markdown summary for user confirmation
+- After showing the confirmation, ask the user to confirm with 'yes'/'confirm' or decline with 'no'
+- When user responds with confirmation intent, call confirm_operation with confirmed=true
+- When user declines, call confirm_operation with confirmed=false
+- After successful operations (booking/cancellation), the conversation history will be cleared automatically
+- If user wants to modify details after seeing confirmation, collect new details and show confirmation again
+
+USER CONFIRMATION PATTERNS:
+- Confirmation: "yes", "confirm", "proceed", "do it", "go ahead", "that's correct", "looks good", "confirm"
+- Decline: "no", "cancel", "stop", "wait", "not correct", "change", "modify", "wait", "i want ... to be ..."
+
 CRITICAL FUNCTION CALLING RULES:
 - ALWAYS call search_available_gpus when users ask about availability, quantities, or "how many" GPUs are available
 - ALWAYS include the specific GPU model (e.g., "RTX-3080") when searching
@@ -1060,12 +1437,15 @@ CRITICAL FUNCTION CALLING RULES:
         
         # Make API call with function calling
         try:
+            print("Making API call to DeepSeek...")  # 调试日志
             response = self.client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 tools=self.tools,
-                tool_choice="auto"
+                tool_choice="auto",
+                timeout=30  # 30秒超时
             )
+            print("API call successful!")  # 调试日志
             
             message = response.choices[0].message
             
@@ -1089,10 +1469,15 @@ CRITICAL FUNCTION CALLING RULES:
                 self.conversation_history.append(assistant_message)
                 
                 # Execute function calls and add results
+                should_clear_history = False
                 for tool_call in message.tool_calls:
                     function_name = tool_call.function.name
                     parameters = json.loads(tool_call.function.arguments)
                     result = self.execute_function(function_name, parameters)
+                    
+                    # Check if we should clear history after this operation
+                    if isinstance(result, dict) and result.get("clear_history"):
+                        should_clear_history = True
                     
                     # Add function result to conversation
                     self.conversation_history.append({
@@ -1117,6 +1502,11 @@ CRITICAL FUNCTION CALLING RULES:
                     "content": final_message.content
                 }
                 self.conversation_history.append(final_assistant_message)
+                
+                # Clear history if requested (after successful booking/cancellation)
+                if should_clear_history:
+                    self.clear_conversation_history()
+                
                 return final_message.content
             
             else:
@@ -1129,7 +1519,17 @@ CRITICAL FUNCTION CALLING RULES:
                 return message.content
                 
         except Exception as e:
-            return f"I apologize, but I encountered an error while processing your request: {str(e)}"
+            print(f"AI API Error: {str(e)}")  # 添加调试日志
+            import traceback
+            traceback.print_exc()  # 打印完整错误堆栈
+            
+            # 提供备用响应
+            if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                return "⚠️ AI服务暂时响应较慢，请稍后重试。您也可以发送邮件到 nailfec17@gmail.com 寻求人工帮助。"
+            elif "api" in str(e).lower() or "key" in str(e).lower():
+                return "⚠️ AI服务配置问题，请联系管理员。邮箱：nailfec17@gmail.com"
+            else:
+                return f"⚠️ 抱歉，我遇到了技术问题：{str(e)}。请稍后重试或联系支持团队：nailfec17@gmail.com"
 
     def chat(self):
         """Main chat loop"""

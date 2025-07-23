@@ -429,9 +429,8 @@
             showTypingIndicator();
             
             try {
-                // In a real implementation, this would call the API
-                // For now, we'll simulate the chatbot response
-                const response = await simulateChatbotResponse(message);
+                // Call the real chatbot API
+                const response = await callChatAPI(message);
                 
                 // Hide typing indicator
                 hideTypingIndicator();

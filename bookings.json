@@ -448,5 +448,23 @@
     "total_cost": 960.0,
     "overtime_minutes": 0,
     "overtime_cost": 0.0
+  },
+  {
+    "booking_id": "book_026",
+    "booking_hash": "b9e4dcb37cebcd232f4e7ae5aa0ea5a3",
+    "user_name": "John",
+    "user_email": "nailfec17@gmail.com",
+    "gpu_model": "RTX-4090",
+    "gpu_id": "RTX4090-001",
+    "start_time": "2025-07-23T21:52:00Z",
+    "end_time": "2025-07-24T23:59:59Z",
+    "status": "scheduled",
+    "storage_gb": 128,
+    "memory_gb": 32,
+    "cpu_cores": 8,
+    "created_at": "2025-07-23T21:54:06.966284Z",
+    "total_cost": 130.67,
+    "overtime_minutes": 0,
+    "overtime_cost": 0.0
   }
 ]
