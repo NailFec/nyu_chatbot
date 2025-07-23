@@ -106,7 +106,7 @@ class HPC_ChatBot:
                             },
                             "gpu_id": {
                                 "type": "string",
-                                "description": "Specific GPU instance ID"
+                                "description": "Specific GPU instance ID (optional - will auto-select if not provided)"
                             },
                             "user_name": {
                                 "type": "string",
@@ -137,7 +137,7 @@ class HPC_ChatBot:
                                 "description": "Required CPU cores (default: 8)"
                             }
                         },
-                        "required": ["gpu_model", "gpu_id", "user_name", "user_email", "start_time", "end_time"]
+                        "required": ["gpu_model", "user_name", "user_email", "start_time", "end_time"]
                     }
                 }
             },
@@ -261,6 +261,34 @@ class HPC_ChatBot:
         
         return {"available_gpus": available_gpus}
 
+    def get_available_gpu_id(self, gpu_model: str, start_time: str, end_time: str) -> str:
+        """Get the first available GPU ID for a given model and time period"""
+        if gpu_model not in self.gpu_data["gpu_models"]:
+            return None
+        
+        gpu_info = self.gpu_data["gpu_models"][gpu_model]
+        
+        for instance in gpu_info["instances"]:
+            is_available = True
+            
+            # Check for conflicts with existing bookings
+            for booking in self.bookings:
+                if (booking["gpu_id"] == instance["id"] and 
+                    booking["status"] in ["active", "scheduled"]):
+                    booking_start = datetime.datetime.fromisoformat(booking["start_time"].replace('Z', '+00:00'))
+                    booking_end = datetime.datetime.fromisoformat(booking["end_time"].replace('Z', '+00:00'))
+                    request_start = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    request_end = datetime.datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    
+                    if (request_start < booking_end and request_end > booking_start):
+                        is_available = False
+                        break
+            
+            if is_available:
+                return instance["id"]
+        
+        return None
+
     def get_gpu_recommendations(self, use_case: str, budget_per_hour: float = None, 
                               memory_requirement: float = None) -> Dict:
         """Get GPU recommendations based on use case"""
@@ -312,18 +340,69 @@ class HPC_ChatBot:
         
         return {"recommendations": recommendations}
 
-    def create_booking(self, gpu_model: str, gpu_id: str, user_name: str, user_email: str,
-                      start_time: str, end_time: str, storage_gb: int = 128, 
+    def create_booking(self, gpu_model: str, gpu_id: str = None, user_name: str = None, user_email: str = None,
+                      start_time: str = None, end_time: str = None, storage_gb: int = 128, 
                       memory_gb: int = 32, cpu_cores: int = 8) -> Dict:
-        """Create a new booking"""
+        """Create a new booking - requires all essential information"""
+        
+        # Validate all required parameters
+        if not gpu_model or not user_name or not user_email or not start_time or not end_time:
+            return {"success": False, "message": "All booking information is required: GPU model, user name, email, start time, and end time"}
+        
+        # Validate email format
+        if "@" not in user_email or "." not in user_email:
+            return {"success": False, "message": "Invalid email format"}
+        
+        # Validate user name (should not be empty or just spaces)
+        if not user_name.strip():
+            return {"success": False, "message": "User name cannot be empty"}
+        
+        # Validate GPU model exists
+        if gpu_model not in self.gpu_data["gpu_models"]:
+            return {"success": False, "message": f"GPU model '{gpu_model}' not found in inventory"}
+        
+        # Auto-select GPU ID if not provided
+        if not gpu_id:
+            gpu_id = self.get_available_gpu_id(gpu_model, start_time, end_time)
+            if not gpu_id:
+                return {"success": False, "message": f"No available {gpu_model} GPUs found for the requested time period"}
+        else:
+            # Validate provided GPU ID exists for this model
+            gpu_info = self.gpu_data["gpu_models"][gpu_model]
+            valid_gpu_ids = [instance["id"] for instance in gpu_info["instances"]]
+            if gpu_id not in valid_gpu_ids:
+                return {"success": False, "message": f"GPU ID '{gpu_id}' not found for model '{gpu_model}'"}
+        
+        # Validate time format and logic
+        try:
+            start_dt = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = datetime.datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            
+            if start_dt >= end_dt:
+                return {"success": False, "message": "End time must be after start time"}
+            
+            if start_dt < datetime.datetime.now(datetime.timezone.utc):
+                return {"success": False, "message": "Start time cannot be in the past"}
+                
+        except ValueError:
+            return {"success": False, "message": "Invalid time format. Please use ISO format (e.g., '2025-07-23T10:00:00Z')"}
+        
+        # Check if GPU is available during the requested time
+        for booking in self.bookings:
+            if (booking["gpu_id"] == gpu_id and 
+                booking["status"] in ["active", "scheduled"]):
+                booking_start = datetime.datetime.fromisoformat(booking["start_time"].replace('Z', '+00:00'))
+                booking_end = datetime.datetime.fromisoformat(booking["end_time"].replace('Z', '+00:00'))
+                
+                if (start_dt < booking_end and end_dt > booking_start):
+                    return {"success": False, "message": f"GPU {gpu_id} is not available during the requested time period"}
+        
         # Generate booking ID and hash
         booking_id = f"book_{len(self.bookings) + 1:03d}"
         booking_hash = hashlib.md5(f"{booking_id}{user_email}{start_time}".encode()).hexdigest()
         
         # Calculate cost
         gpu_info = self.gpu_data["gpu_models"][gpu_model]
-        start_dt = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-        end_dt = datetime.datetime.fromisoformat(end_time.replace('Z', '+00:00'))
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
         duration_slots = duration_hours * 2  # 30-minute slots
         total_cost = duration_slots * gpu_info["price_per_30min"]
@@ -332,8 +411,8 @@ class HPC_ChatBot:
         new_booking = {
             "booking_id": booking_id,
             "booking_hash": booking_hash,
-            "user_name": user_name,
-            "user_email": user_email,
+            "user_name": user_name.strip(),
+            "user_email": user_email.lower().strip(),
             "gpu_model": gpu_model,
             "gpu_id": gpu_id,
             "start_time": start_time,
@@ -742,10 +821,18 @@ class HPC_ChatBot:
             return False
 
     def cancel_booking(self, booking_hash: str, user_email: str) -> Dict:
-        """Cancel a booking"""
+        """Cancel a booking - requires both correct booking hash and user email"""
+        # Validate required parameters
+        if not booking_hash or not user_email:
+            return {"success": False, "message": "Both booking hash and user email are required to cancel a booking"}
+        
+        # Validate email format
+        if "@" not in user_email or "." not in user_email:
+            return {"success": False, "message": "Invalid email format"}
+        
         for i, booking in enumerate(self.bookings):
             if (booking["booking_hash"] == booking_hash and 
-                booking["user_email"] == user_email):
+                booking["user_email"].lower().strip() == user_email.lower().strip()):
                 if booking["status"] in ["scheduled", "active"]:
                     self.bookings[i]["status"] = "cancelled"
                     
@@ -760,7 +847,7 @@ class HPC_ChatBot:
                 else:
                     return {"success": False, "message": "Booking cannot be cancelled (already completed or cancelled)"}
         
-        return {"success": False, "message": "Booking not found"}
+        return {"success": False, "message": "Booking not found or email/hash combination is incorrect"}
 
     def calculate_billing(self, user_email: str, booking_hash: str = None, 
                          start_date: str = None, end_date: str = None) -> Dict:
@@ -851,9 +938,25 @@ Guidelines:
 - Never provide fixed responses - always process through AI
 - Guide users through the booking process step by step
 - Do not say anything that is not related to your assistant role about GPU and our company
+- You do not need to check if the date is in the future or not, and the year is 2025 if the user does not specify
+- The user can only book one GPU at a time
+- Just output plain text responses, no any markdown formatting like "**bold**" or "```code```", and `- sth.` as list. They are not allowed!
 - When asking user for time information, do not suggest user using the specific time format rule
 - IMPORTANT: Just reply 1~3 sentences is enough - do not give too much responses
 - IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose
+
+BOOKING SECURITY REQUIREMENTS:
+- NEVER create a booking without collecting ALL required information: user name, email, GPU model, specific GPU ID, start time, and end time
+- GPU ID can be automatically selected from available instances after checking availability
+- Always validate that the user has provided a valid email address
+- Always check GPU availability before attempting to book
+- If any required information is missing, ask for it before proceeding
+
+CANCELLATION SECURITY REQUIREMENTS:
+- NEVER cancel a booking without BOTH the correct booking hash AND the user's email address
+- Both booking hash and email must match exactly with the original booking
+- If either piece of information is missing or incorrect, deny the cancellation request
+- Always verify the booking exists and belongs to the requesting user
 
 CRITICAL FUNCTION CALLING RULES:
 - ALWAYS call search_available_gpus when users ask about availability, quantities, or "how many" GPUs are available
