@@ -27,7 +27,7 @@ def favicon():
 def api_docs():
     """API documentation endpoint"""
     return jsonify({
-        "version": "0.2",
+        "version": "1.0",
         "endpoints": {
             "/api/chat": "POST - Send a message to the chatbot",
             "/api/gpu_inventory": "GET - Get GPU inventory data",
