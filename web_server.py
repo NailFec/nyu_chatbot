@@ -9,9 +9,38 @@ app = Flask(__name__)
 chatbot = HPC_ChatBot()
 
 @app.route('/')
+def chat():
+    """Serve the chat interface"""
+    return send_from_directory('.', 'chat_interface.html')
+
+@app.route('/dashboard')
 def dashboard():
     """Serve the timeline dashboard"""
     return send_from_directory('.', 'timeline_dashboard.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the favicon"""
+    return send_from_directory('.', 'favicon.ico')
+
+@app.route('/api/')
+def api_docs():
+    """API documentation endpoint"""
+    return jsonify({
+        "version": "0.2",
+        "endpoints": {
+            "/api/chat": "POST - Send a message to the chatbot",
+            "/api/gpu_inventory": "GET - Get GPU inventory data",
+            "/api/bookings": "GET - Get bookings data",
+            "/api/search_gpus": "GET - Search available GPUs",
+            "/api/recommendations": "GET - Get GPU recommendations",
+            "/api/create_booking": "POST - Create a new booking",
+            "/api/query_booking": "GET - Query booking information",
+            "/api/cancel_booking": "POST - Cancel a booking",
+            "/api/billing": "GET - Calculate billing information",
+            "/api/server_status": "GET - Get server status"
+        }
+    })
 
 @app.route('/api/gpu_inventory')
 def get_gpu_inventory():

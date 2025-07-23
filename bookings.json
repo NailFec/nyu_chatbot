@@ -13,9 +13,9 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-19T15:30:00Z",
-    "total_cost": 128.00,
+    "total_cost": 128.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_002",
@@ -31,9 +31,9 @@
     "memory_gb": 128,
     "cpu_cores": 32,
     "created_at": "2025-07-20T12:45:00Z",
-    "total_cost": 240.00,
+    "total_cost": 240.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_003",
@@ -49,9 +49,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-21T09:20:00Z",
-    "total_cost": 60.00,
+    "total_cost": 60.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_004",
@@ -67,9 +67,9 @@
     "memory_gb": 64,
     "cpu_cores": 12,
     "created_at": "2025-07-22T11:15:00Z",
-    "total_cost": 128.00,
+    "total_cost": 128.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_005",
@@ -85,9 +85,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-18T14:30:00Z",
-    "total_cost": 72.00,
+    "total_cost": 72.0,
     "overtime_minutes": 30,
-    "overtime_cost": 7.20
+    "overtime_cost": 7.2
   },
   {
     "booking_id": "book_006",
@@ -103,9 +103,9 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-20T18:45:00Z",
-    "total_cost": 43.20,
+    "total_cost": 43.2,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_007",
@@ -121,9 +121,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-21T10:30:00Z",
-    "total_cost": 72.00,
+    "total_cost": 72.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_008",
@@ -139,9 +139,9 @@
     "memory_gb": 256,
     "cpu_cores": 64,
     "created_at": "2025-07-22T08:20:00Z",
-    "total_cost": 360.00,
+    "total_cost": 360.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_009",
@@ -157,9 +157,9 @@
     "memory_gb": 32,
     "cpu_cores": 12,
     "created_at": "2025-07-22T16:10:00Z",
-    "total_cost": 60.00,
+    "total_cost": 60.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_010",
@@ -175,9 +175,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-18T10:15:00Z",
-    "total_cost": 31.20,
+    "total_cost": 31.2,
     "overtime_minutes": 60,
-    "overtime_cost": 2.60
+    "overtime_cost": 2.6
   },
   {
     "booking_id": "book_011",
@@ -193,9 +193,9 @@
     "memory_gb": 128,
     "cpu_cores": 32,
     "created_at": "2025-07-22T13:45:00Z",
-    "total_cost": 576.00,
+    "total_cost": 576.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_012",
@@ -211,9 +211,9 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-17T18:20:00Z",
-    "total_cost": 72.00,
+    "total_cost": 72.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_013",
@@ -229,9 +229,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-22T14:25:00Z",
-    "total_cost": 48.00,
+    "total_cost": 48.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_014",
@@ -247,7 +247,7 @@
     "memory_gb": 64,
     "cpu_cores": 12,
     "created_at": "2025-07-19T08:40:00Z",
-    "total_cost": 43.20,
+    "total_cost": 43.2,
     "overtime_minutes": 90,
     "overtime_cost": 3.78
   },
@@ -265,9 +265,9 @@
     "memory_gb": 32,
     "cpu_cores": 8,
     "created_at": "2025-07-22T17:55:00Z",
-    "total_cost": 36.00,
+    "total_cost": 36.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_016",
@@ -283,9 +283,9 @@
     "memory_gb": 128,
     "cpu_cores": 32,
     "created_at": "2025-07-16T10:10:00Z",
-    "total_cost": 240.00,
+    "total_cost": 240.0,
     "overtime_minutes": 120,
-    "overtime_cost": 36.00
+    "overtime_cost": 36.0
   },
   {
     "booking_id": "book_017",
@@ -301,9 +301,9 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-21T20:30:00Z",
-    "total_cost": 31.20,
+    "total_cost": 31.2,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_018",
@@ -319,9 +319,9 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-22T19:15:00Z",
-    "total_cost": 120.00,
+    "total_cost": 120.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_019",
@@ -337,9 +337,9 @@
     "memory_gb": 256,
     "cpu_cores": 64,
     "created_at": "2025-07-22T21:40:00Z",
-    "total_cost": 768.00,
+    "total_cost": 768.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
   },
   {
     "booking_id": "book_020",
@@ -355,8 +355,26 @@
     "memory_gb": 64,
     "cpu_cores": 16,
     "created_at": "2025-07-14T16:25:00Z",
-    "total_cost": 144.00,
+    "total_cost": 144.0,
     "overtime_minutes": 0,
-    "overtime_cost": 0.00
+    "overtime_cost": 0.0
+  },
+  {
+    "booking_id": "book_021",
+    "booking_hash": "35acb40eacb45319e4946b71a22c2eac",
+    "user_name": "John",
+    "user_email": "nailfec17@gmail.com",
+    "gpu_model": "A100",
+    "gpu_id": "A100-001",
+    "start_time": "2025-07-22T00:00:00Z",
+    "end_time": "2025-07-24T23:59:59Z",
+    "status": "cancelled",
+    "storage_gb": 128,
+    "memory_gb": 32,
+    "cpu_cores": 8,
+    "created_at": "2025-07-23T10:50:49.871498Z",
+    "total_cost": 720.0,
+    "overtime_minutes": 0,
+    "overtime_cost": 0.0
   }
 ]

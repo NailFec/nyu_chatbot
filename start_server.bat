@@ -1,0 +1,3 @@
+@echo off
+echo Starting HPC Chatbot Server...
+python web_server.py
