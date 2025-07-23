@@ -38,7 +38,8 @@ def api_docs():
             "/api/query_booking": "GET - Query booking information",
             "/api/cancel_booking": "POST - Cancel a booking",
             "/api/billing": "GET - Calculate billing information",
-            "/api/server_status": "GET - Get server status"
+            "/api/server_status": "GET - Get server status",
+            "/api/current_datetime": "GET - Get current date and time"
         }
     })
 
@@ -169,6 +170,16 @@ def calculate_billing_api():
             return jsonify({"error": "User email is required"}), 400
         
         result = chatbot.calculate_billing(user_email, booking_hash, start_date, end_date)
+        return jsonify(result)
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/current_datetime')
+def get_current_datetime_api():
+    """API endpoint to get current date and time"""
+    try:
+        result = chatbot.get_current_datetime()
         return jsonify(result)
     
     except Exception as e:

@@ -4,6 +4,8 @@ import datetime
 import webbrowser
 import tempfile
 import os
+import markdown
+import re
 from typing import List, Dict, Optional, Any
 from openai import OpenAI
 import nailfec
@@ -213,6 +215,18 @@ class HPC_ChatBot:
                             }
                         },
                         "required": ["user_email"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_datetime",
+                    "description": "Get the current date and time. Use this when users mention 'today', 'now', 'right now', 'current time', or need to book something immediately.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
                     }
                 }
             }
@@ -887,6 +901,67 @@ class HPC_ChatBot:
             "booking_count": len(relevant_bookings)
         }
 
+    def get_current_datetime(self) -> Dict:
+        """Get the current date and time information"""
+        now = datetime.datetime.now()
+        
+        return {
+            "current_datetime": now.isoformat(),
+            "current_date": now.strftime("%Y-%m-%d"),
+            "current_time": now.strftime("%H:%M:%S"),
+            "formatted_datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "day_of_week": now.strftime("%A"),
+            "timezone": "Local time",
+            "iso_format": now.strftime("%Y-%m-%dT%H:%M:%S"),
+            "year": now.year,
+            "month": now.month,
+            "day": now.day,
+            "hour": now.hour,
+            "minute": now.minute,
+            "second": now.second
+        }
+
+    def markdown_to_html(self, text: str) -> str:
+        """Convert markdown text to HTML with custom styling"""
+        # Configure markdown with extensions
+        md = markdown.Markdown(extensions=[
+            'markdown.extensions.fenced_code',
+            'markdown.extensions.tables',
+            'markdown.extensions.nl2br',
+            'markdown.extensions.codehilite',
+            'markdown.extensions.toc'
+        ])
+        
+        # Convert markdown to HTML
+        html = md.convert(text)
+        
+        # Add custom CSS classes for better styling
+        html = self._add_custom_css_classes(html)
+        
+        return html
+    
+    def _add_custom_css_classes(self, html: str) -> str:
+        """Add custom CSS classes to HTML elements for better styling"""
+        # Add classes to common elements
+        replacements = [
+            (r'<table>', r'<table class="markdown-table">'),
+            (r'<blockquote>', r'<blockquote class="markdown-blockquote">'),
+            (r'<code>', r'<code class="markdown-inline-code">'),
+            (r'<pre>', r'<pre class="markdown-code-block">'),
+            (r'<h1>', r'<h1 class="markdown-h1">'),
+            (r'<h2>', r'<h2 class="markdown-h2">'),
+            (r'<h3>', r'<h3 class="markdown-h3">'),
+            (r'<h4>', r'<h4 class="markdown-h4">'),
+            (r'<ul>', r'<ul class="markdown-ul">'),
+            (r'<ol>', r'<ol class="markdown-ol">'),
+            (r'<li>', r'<li class="markdown-li">'),
+        ]
+        
+        for pattern, replacement in replacements:
+            html = re.sub(pattern, replacement, html)
+        
+        return html
+
     def execute_function(self, function_name: str, parameters: Dict) -> Any:
         """Execute a function call and return the result"""
         function_map = {
@@ -895,7 +970,8 @@ class HPC_ChatBot:
             "create_booking": self.create_booking,
             "query_booking_info": self.query_booking_info,
             "cancel_booking": self.cancel_booking,
-            "calculate_billing": self.calculate_billing
+            "calculate_billing": self.calculate_billing,
+            "get_current_datetime": self.get_current_datetime
         }
         
         if function_name in function_map:
@@ -931,6 +1007,16 @@ Company information:
 - We support various use cases from gaming to AI training to scientific computing
 - If the user want to turn to human response, show the E-mail nailfec17@gmail.com for user to connect with
 
+MARKDOWN FORMATTING:
+- You can use Markdown formatting in your responses for better readability
+- Use **bold** for important information like prices, GPU models, and booking details
+- Use `code blocks` for GPU IDs, booking hashes, and technical terms
+- Use tables for comparing GPU specifications or pricing
+- Use > blockquotes for important warnings or notes
+- Use bullet points and numbered lists for step-by-step instructions
+- Use headings (##, ###) to organize longer responses
+- Example: **RTX-4090** with `24GB VRAM` costs **$15.00 per 30 minutes**
+
 Guidelines:
 - Always be helpful, professional, and simple
 - Ask questions one at a time, not all at once
@@ -940,7 +1026,6 @@ Guidelines:
 - Do not say anything that is not related to your assistant role about GPU and our company
 - You do not need to check if the date is in the future or not, and the year is 2025 if the user does not specify
 - The user can only book one GPU at a time
-- Just output plain text responses, no any markdown formatting like "**bold**" or "```code```", and `- sth.` as list. They are not allowed!
 - When asking user for time information, do not suggest user using the specific time format rule
 - IMPORTANT: Just reply 1~3 sentences is enough - do not give too much responses
 - IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose
