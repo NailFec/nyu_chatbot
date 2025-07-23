@@ -376,5 +376,41 @@
     "total_cost": 720.0,
     "overtime_minutes": 0,
     "overtime_cost": 0.0
+  },
+  {
+    "booking_id": "book_022",
+    "booking_hash": "cefb4d61b88756e1218706d395064b46",
+    "user_name": "John",
+    "user_email": "nailfec17@gmail.com",
+    "gpu_model": "H100",
+    "gpu_id": "H100-003",
+    "start_time": "2025-07-20T00:00:00Z",
+    "end_time": "2025-07-26T23:59:59Z",
+    "status": "scheduled",
+    "storage_gb": 128,
+    "memory_gb": 32,
+    "cpu_cores": 8,
+    "created_at": "2025-07-23T16:52:14.066300Z",
+    "total_cost": 2688.0,
+    "overtime_minutes": 0,
+    "overtime_cost": 0.0
+  },
+  {
+    "booking_id": "book_023",
+    "booking_hash": "6d2b7bdb78138636b7348e9eaf0510ce",
+    "user_name": "John",
+    "user_email": "nailfec17@gmail.com",
+    "gpu_model": "RTX-4090",
+    "gpu_id": "RTX4090-002",
+    "start_time": "2025-07-20T00:00:00Z",
+    "end_time": "2025-07-27T23:59:59Z",
+    "status": "cancelled",
+    "storage_gb": 128,
+    "memory_gb": 32,
+    "cpu_cores": 8,
+    "created_at": "2025-07-23T17:04:54.454012Z",
+    "total_cost": 960.0,
+    "overtime_minutes": 0,
+    "overtime_cost": 0.0
   }
 ]

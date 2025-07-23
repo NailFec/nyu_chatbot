@@ -1,6 +1,9 @@
 import json
 import hashlib
 import datetime
+import webbrowser
+import tempfile
+import os
 from typing import List, Dict, Optional, Any
 from openai import OpenAI
 import nailfec
@@ -39,7 +42,7 @@ class HPC_ChatBot:
                 "type": "function",
                 "function": {
                     "name": "search_available_gpus",
-                    "description": "Search for available GPU instances based on model, time range, and specifications",
+                    "description": "REQUIRED: Search for available GPU instances. Must be called whenever users ask about GPU availability, quantities, or 'how many' GPUs are available. Also required when checking availability for specific dates/times for booking.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -351,6 +354,9 @@ class HPC_ChatBot:
         with open('bookings.json', 'w') as f:
             json.dump(self.bookings, f, indent=2)
         
+        # Display booking card
+        self.display_booking_card(new_booking, is_cancelled=False)
+        
         return {"booking": new_booking, "success": True}
 
     def query_booking_info(self, booking_hash: str = None, user_email: str = None, 
@@ -368,6 +374,373 @@ class HPC_ChatBot:
         
         return {"bookings": matching_bookings}
 
+    def generate_booking_card_data(self, booking: Dict, is_cancelled: bool = False) -> Dict:
+        """Generate structured booking card data using AI"""
+        
+        status_text = "CANCELLED" if is_cancelled else "CONFIRMED"
+        
+        system_prompt = f"""
+        You are a booking card data generator. Generate a structured JSON object for displaying a booking information card.
+        The card should be well-designed and contain all relevant booking information.
+        
+        REQUIRED JSON FORMAT:
+        {{
+            "card_type": "booking_confirmation" or "booking_cancellation",
+            "status": "{status_text}",
+            "booking_hash": "booking hash",
+            "user_info": {{
+                "name": "user name",
+                "email": "user email"
+            }},
+            "gpu_info": {{
+                "model": "GPU model",
+                "id": "GPU instance ID",
+                "memory": "GPU memory",
+                "cores": "CPU cores allocated"
+            }},
+            "time_info": {{
+                "start_time": "formatted start time",
+                "end_time": "formatted end time",
+                "duration": "duration in hours"
+            }},
+            "resources": {{
+                "storage": "storage in GB",
+                "memory": "system memory in GB",
+                "cpu_cores": "CPU cores"
+            }},
+            "billing": {{
+                "total_cost": "total cost in USD",
+                "overtime_cost": "overtime cost in USD"
+            }},
+            "card_style": {{
+                "background_color": "#4CAF50" for confirmed or "#f44336" for cancelled,
+                "border_color": "#45a049" for confirmed or "#d32f2f" for cancelled,
+                "status_color": "#ffffff"
+            }}
+        }}
+        """
+        
+        user_prompt = f"Generate booking card data for: {json.dumps(booking)}"
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={'type': 'json_object'}
+            )
+            
+            card_data = json.loads(response.choices[0].message.content)
+            return card_data
+            
+        except Exception as e:
+            # Fallback to manual card data generation
+            return self._manual_card_data(booking, is_cancelled)
+
+    def _manual_card_data(self, booking: Dict, is_cancelled: bool = False) -> Dict:
+        """Fallback manual card data generation"""
+        start_time = datetime.datetime.fromisoformat(booking["start_time"].replace('Z', '+00:00'))
+        end_time = datetime.datetime.fromisoformat(booking["end_time"].replace('Z', '+00:00'))
+        duration = (end_time - start_time).total_seconds() / 3600
+        
+        return {
+            "card_type": "booking_cancellation" if is_cancelled else "booking_confirmation",
+            "status": "CANCELLED" if is_cancelled else "CONFIRMED",
+            "booking_hash": booking["booking_hash"],
+            "user_info": {
+                "name": booking["user_name"],
+                "email": booking["user_email"]
+            },
+            "gpu_info": {
+                "model": booking["gpu_model"],
+                "id": booking["gpu_id"],
+                "memory": self.gpu_data["gpu_models"].get(booking["gpu_model"], {}).get("memory", "N/A"),
+                "cores": str(booking.get("cpu_cores", 8))
+            },
+            "time_info": {
+                "start_time": start_time.strftime("%Y-%m-%d %H:%M"),
+                "end_time": end_time.strftime("%Y-%m-%d %H:%M"),
+                "duration": f"{duration:.1f} hours"
+            },
+            "resources": {
+                "storage": f"{booking.get('storage_gb', 128)} GB",
+                "memory": f"{booking.get('memory_gb', 32)} GB",
+                "cpu_cores": str(booking.get('cpu_cores', 8))
+            },
+            "billing": {
+                "total_cost": f"${booking['total_cost']:.2f}",
+                "overtime_cost": f"${booking.get('overtime_cost', 0):.2f}"
+            },
+            "card_style": {
+                "background_color": "#f44336" if is_cancelled else "#4CAF50",
+                "border_color": "#d32f2f" if is_cancelled else "#45a049",
+                "status_color": "#ffffff"
+            }
+        }
+
+    def generate_booking_card_html(self, card_data: Dict) -> str:
+        """Generate HTML for booking card"""
+        
+        html_template = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SK HPC Services - Booking {card_data['status']}</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    margin: 0;
+                    padding: 20px;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }}
+                
+                .booking-card {{
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                    max-width: 500px;
+                    width: 100%;
+                    overflow: hidden;
+                    animation: slideIn 0.6s ease-out;
+                }}
+                
+                @keyframes slideIn {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(30px);
+                    }}
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
+                    }}
+                }}
+                
+                .card-header {{
+                    background: {card_data['card_style']['background_color']};
+                    color: {card_data['card_style']['status_color']};
+                    padding: 24px;
+                    text-align: center;
+                    position: relative;
+                }}
+                
+                .status-badge {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    letter-spacing: 2px;
+                    margin-bottom: 8px;
+                }}
+                
+                .company-logo {{
+                    font-size: 14px;
+                    opacity: 0.9;
+                    margin-top: 8px;
+                }}
+                
+                .card-body {{
+                    padding: 24px;
+                }}
+                
+                .section {{
+                    margin-bottom: 20px;
+                    padding-bottom: 16px;
+                    border-bottom: 1px solid #f0f0f0;
+                }}
+                
+                .section:last-child {{
+                    border-bottom: none;
+                    margin-bottom: 0;
+                }}
+                
+                .section-title {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #666;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    margin-bottom: 12px;
+                }}
+                
+                .info-row {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 8px;
+                }}
+                
+                .info-label {{
+                    color: #888;
+                    font-size: 14px;
+                }}
+                
+                .info-value {{
+                    font-weight: 600;
+                    color: #333;
+                    font-size: 14px;
+                }}
+                
+                .booking-hash {{
+                    background: #f8f9fa;
+                    padding: 12px;
+                    border-radius: 8px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    color: #495057;
+                    word-break: break-all;
+                    text-align: center;
+                }}
+                
+                .gpu-badge {{
+                    display: inline-block;
+                    background: linear-gradient(45deg, #667eea, #764ba2);
+                    color: white;
+                    padding: 6px 12px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    margin-top: 4px;
+                }}
+                
+                .cost-highlight {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: {card_data['card_style']['background_color']};
+                }}
+                
+                .footer {{
+                    background: #f8f9fa;
+                    padding: 16px 24px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #666;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="booking-card">
+                <div class="card-header">
+                    <div class="status-badge">{card_data['status']}</div>
+                    <div>Booking Hash: {card_data['booking_hash'][:8]}...</div>
+                    <div class="company-logo">SK (Shame Kitten) HPC Services</div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="section">
+                        <div class="section-title">User Information</div>
+                        <div class="info-row">
+                            <span class="info-label">Name:</span>
+                            <span class="info-value">{card_data['user_info']['name']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Email:</span>
+                            <span class="info-value">{card_data['user_info']['email']}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">GPU & Resources</div>
+                        <div class="info-row">
+                            <span class="info-label">GPU Model:</span>
+                            <span class="info-value">
+                                {card_data['gpu_info']['model']}
+                                <span class="gpu-badge">{card_data['gpu_info']['memory']}</span>
+                            </span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">GPU ID:</span>
+                            <span class="info-value">{card_data['gpu_info']['id']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Storage:</span>
+                            <span class="info-value">{card_data['resources']['storage']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">System Memory:</span>
+                            <span class="info-value">{card_data['resources']['memory']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">CPU Cores:</span>
+                            <span class="info-value">{card_data['resources']['cpu_cores']}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Schedule</div>
+                        <div class="info-row">
+                            <span class="info-label">Start Time:</span>
+                            <span class="info-value">{card_data['time_info']['start_time']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">End Time:</span>
+                            <span class="info-value">{card_data['time_info']['end_time']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Duration:</span>
+                            <span class="info-value">{card_data['time_info']['duration']}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Billing</div>
+                        <div class="info-row">
+                            <span class="info-label">Base Cost:</span>
+                            <span class="info-value cost-highlight">{card_data['billing']['total_cost']}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Overtime Cost:</span>
+                            <span class="info-value">{card_data['billing']['overtime_cost']}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="booking-hash">
+                        Full Booking Hash: {card_data['booking_hash']}
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    For support, contact: nailfec17@gmail.com<br>
+                    Thank you for choosing SK HPC Services!
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html_template
+
+    def display_booking_card(self, booking: Dict, is_cancelled: bool = False):
+        """Generate and display booking card in browser"""
+        try:
+            # Generate card data using AI
+            card_data = self.generate_booking_card_data(booking, is_cancelled)
+            
+            # Generate HTML
+            html_content = self.generate_booking_card_html(card_data)
+            
+            # Save to temporary file and open in browser
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+                f.write(html_content)
+                temp_file = f.name
+            
+            # Open in default browser
+            webbrowser.open(f'file://{temp_file}')
+            
+            # Clean up after a delay (optional)
+            # Note: In a real application, you might want to manage this differently
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error displaying booking card: {str(e)}")
+            return False
+
     def cancel_booking(self, booking_hash: str, user_email: str) -> Dict:
         """Cancel a booking"""
         for i, booking in enumerate(self.bookings):
@@ -379,6 +752,9 @@ class HPC_ChatBot:
                     # Save to file
                     with open('bookings.json', 'w') as f:
                         json.dump(self.bookings, f, indent=2)
+                    
+                    # Display cancellation card
+                    self.display_booking_card(self.bookings[i], is_cancelled=True)
                     
                     return {"success": True, "message": "Booking cancelled successfully"}
                 else:
@@ -475,8 +851,20 @@ Guidelines:
 - Never provide fixed responses - always process through AI
 - Guide users through the booking process step by step
 - Do not say anything that is not related to your assistant role about GPU and our company
+- When asking user for time information, do not suggest user using the specific time format rule
 - IMPORTANT: Just reply 1~3 sentences is enough - do not give too much responses
-- IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose"""
+- IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose
+
+CRITICAL FUNCTION CALLING RULES:
+- ALWAYS call search_available_gpus when users ask about availability, quantities, or "how many" GPUs are available
+- ALWAYS include the specific GPU model (e.g., "RTX-3080") when searching
+- When users mention specific dates/times for booking, ALWAYS include start_time and end_time in the search to check real availability
+- Never give availability information without calling the search function first
+- Examples requiring search_available_gpus:
+  * "how many 3080 available"
+  * "are RTX-4090s available"
+  * "check availability for July 22-25"
+  * "what GPUs are free this week" """
         }
         
         # Prepare messages for API call
@@ -496,7 +884,21 @@ Guidelines:
             # Handle function calls
             if message.tool_calls:
                 # Add assistant message with tool calls to history
-                self.conversation_history.append(message)
+                assistant_message = {
+                    "role": "assistant",
+                    "content": message.content,
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments
+                            }
+                        } for tool_call in message.tool_calls
+                    ]
+                }
+                self.conversation_history.append(assistant_message)
                 
                 # Execute function calls and add results
                 for tool_call in message.tool_calls:
@@ -520,12 +922,22 @@ Guidelines:
                 )
                 
                 final_message = final_response.choices[0].message
-                self.conversation_history.append(final_message)
+                
+                # Add final response to history
+                final_assistant_message = {
+                    "role": "assistant",
+                    "content": final_message.content
+                }
+                self.conversation_history.append(final_assistant_message)
                 return final_message.content
             
             else:
                 # No function calls, just add response to history
-                self.conversation_history.append(message)
+                assistant_message = {
+                    "role": "assistant",
+                    "content": message.content
+                }
+                self.conversation_history.append(assistant_message)
                 return message.content
                 
         except Exception as e:
