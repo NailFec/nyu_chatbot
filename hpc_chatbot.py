@@ -1451,36 +1451,42 @@ CRITICAL FUNCTION CALLING RULES:
             
             # Handle function calls
             if message.tool_calls:
-                # Simplify the process of adding assistant messages to history
-                self.conversation_history.append({
+                # Add assistant message with tool calls to history
+                assistant_message = {
                     "role": "assistant",
                     "content": message.content,
                     "tool_calls": [
                         {
-                            "id": tc.id,
+                            "id": tool_call.id,
                             "type": "function",
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in message.tool_calls
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments
+                            }
+                        } for tool_call in message.tool_calls
                     ]
-                })
+                }
+                self.conversation_history.append(assistant_message)
                 
-                # Optimize function calls and result processing
+                # Execute function calls and add results
                 should_clear_history = False
                 for tool_call in message.tool_calls:
-                    # Directly get function name and parameters
                     function_name = tool_call.function.name
                     parameters = json.loads(tool_call.function.arguments)
                     result = self.execute_function(function_name, parameters)
                     
-                    # Check if history needs to be cleared and add results to conversation history
-                    should_clear_history = should_clear_history or (isinstance(result, dict) and result.get("clear_history", False))
+                    # Check if we should clear history after this operation
+                    if isinstance(result, dict) and result.get("clear_history"):
+                        should_clear_history = True
+                    
+                    # Add function result to conversation
                     self.conversation_history.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": json.dumps(result)
                     })
                 
-                # Get final response
+                # Get final response after function execution
                 final_response = self.client.chat.completions.create(
                     model="deepseek-chat",
                     messages=[system_message] + self.conversation_history,
@@ -1489,9 +1495,15 @@ CRITICAL FUNCTION CALLING RULES:
                 )
                 
                 final_message = final_response.choices[0].message
-                self.conversation_history.append({"role": "assistant", "content": final_message.content})
                 
-                # If history needs to be cleared, call the method directly
+                # Add final response to history
+                final_assistant_message = {
+                    "role": "assistant",
+                    "content": final_message.content
+                }
+                self.conversation_history.append(final_assistant_message)
+                
+                # Clear history if requested (after successful booking/cancellation)
                 if should_clear_history:
                     self.clear_conversation_history()
                 
