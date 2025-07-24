@@ -254,3 +254,36 @@ class CircuitBreaker:
 This incident highlighted the critical importance of careful thread synchronization in web applications. The resolution involved removing unnecessary locking mechanisms that were causing deadlocks during object initialization. Moving forward, implementing proper logging, health checks, and concurrent testing will help prevent similar issues and enable faster diagnosis when problems occur.
 
 The key lesson learned is that **thread locks should protect data consistency, not operational flow** - keep critical sections minimal and avoid blocking operations within locked code paths.
+
+---
+
+code snippet:
+
+```python
+def get_or_create_chatbot(session_id):
+    with lock:  # ⚠️ Entire function locked
+        if session_id in memory_sessions:
+            return memory_sessions[session_id]
+        chatbot = HPC_ChatBot(session_id)  # Deadlock here
+        save_chatbot(session_id, chatbot)
+        return chatbot
+
+def bad_example():
+    with lock:  # ❌ encountered deadlock
+        expensive_io_operation()
+        complex_initialization()
+        network_calls()
+```
+
+```python
+def get_or_create_chatbot(session_id):
+    if session_id in memory_sessions:  # ✅ Lock-free read
+        return memory_sessions[session_id]
+    chatbot = HPC_ChatBot(session_id)  # ✅ No lock during initialization
+    save_chatbot(session_id, chatbot)
+    return chatbot
+
+def save_chatbot(session_id, chatbot):
+    with lock:
+        memory_sessions[session_id] = chatbot  # Only critical data write
+```
