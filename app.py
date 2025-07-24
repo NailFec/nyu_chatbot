@@ -216,7 +216,7 @@ def debug_sessions():
 def api_docs():
     """API documentation"""
     return jsonify({
-        "version": "2.3 Reverted",
+        "version": "2.4",
         "session_apis": {
             "/api/chat": "POST - Chat with session",
             "/api/session/clear": "POST - Clear session"

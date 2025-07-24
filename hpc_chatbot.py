@@ -6,6 +6,8 @@ import tempfile
 import os
 import markdown
 import re
+import time
+import traceback
 from typing import List, Dict, Optional, Any
 from openai import OpenAI
 import nailfec
@@ -1338,21 +1340,48 @@ Please review the booking you want to cancel:
         
         if function_name in function_map:
             try:
-                return function_map[function_name](**parameters)
+                print(f"Executing function: {function_name} with parameters: {parameters}")
+                result = function_map[function_name](**parameters)
+                print(f"Function {function_name} completed successfully")
+                return result
             except Exception as e:
-                return {"error": str(e)}
+                print(f"Error executing function {function_name}: {str(e)}")
+                traceback.print_exc()
+                return {"error": f"Function execution failed: {str(e)}"}
         else:
+            print(f"Unknown function: {function_name}")
             return {"error": f"Unknown function: {function_name}"}
 
     def send_message_to_ai(self, user_message: str) -> str:
-        """Send message to AI and get response"""
-        # Add user message to conversation history
-        self.conversation_history.append({"role": "user", "content": user_message})
+        """Send message to AI and get response with retry mechanism for empty responses"""
+        
+        # Handle special commands
+        if user_message.strip() == "/clear":
+            self.clear_conversation_history()
+            return "🧹 Conversation history has been cleared! Starting fresh!"
+        
+        if user_message.strip() == "/shane":
+            # Don't add this to conversation history, just modify the system message for this session
+            # Add a friendly message to conversation history to trigger shane mode response
+            self.conversation_history.append({"role": "user", "content": "Hello! I want you to be in cute kitten mode now."})
+        
+        if user_message.strip() == "/again":
+            # Resend the last user message if available
+            if len(self.conversation_history) >= 2 and self.conversation_history[-2]["role"] == "user":
+                last_user_message = self.conversation_history[-2]["content"]
+                # Remove the "/again" from history and resend last message
+                self.conversation_history = self.conversation_history[:-1]
+                return self.send_message_to_ai(last_user_message)
+            else:
+                return "No previous message to resend. Please type your question again."
+        
+        # Add user message to conversation history (except for /clear and /again commands)
+        if user_message.strip() not in ["/clear", "/again"]:
+            if user_message.strip() != "/shane":
+                self.conversation_history.append({"role": "user", "content": user_message})
         
         # Prepare system message
-        system_message = {
-            "role": "system",
-            "content": """You are an AI assistant for SK (Shame Kitten) HPC Services, a company that provides high-performance computing GPU rental services.
+        base_system_content = """You are an AI assistant for SK (Shame Kitten) HPC Services, a company that provides high-performance computing GPU rental services.
 
 Your role is to help users with:
 1. Booking GPU instances for various workloads
@@ -1386,9 +1415,10 @@ Guidelines:
 - Never provide fixed responses - always process through AI
 - Guide users through the booking process step by step
 - Do not say anything that is not related to your assistant role about GPU and our company
-- You do not need to check if the date is in the future or not, and the year is 2025 if the user does not specify
+- The year is 2025 if the user does not specify
 - The user can only book one GPU at a time
 - When asking user for time information, do not suggest user using the specific time format rule
+- Do not ask user to choose GPU ID
 - IMPORTANT: Just reply 1~3 sentences is enough - do not give too much responses
 - IMPORTANT: Do not ask too much questions at a time - just ask a simple question to ask at a time if you need to ask for respose
 
@@ -1430,106 +1460,235 @@ CRITICAL FUNCTION CALLING RULES:
   * "are RTX-4090s available"
   * "check availability for July 22-25"
   * "what GPUs are free this week" """
+        
+        # Add shane mode if requested
+        shane_mode_addition = ""
+        if user_message.strip() == "/shane":
+            shane_mode_addition = "\n\nIMPORTANT: Respond with cute, sweet, lovely words, and as a cute kitten, can use cat emoji 🐱😺😸😻🙀😿😾"
+        
+        system_message = {
+            "role": "system",
+            "content": base_system_content + shane_mode_addition
         }
         
         # Prepare messages for API call
         messages = [system_message] + self.conversation_history
         
-        # Make API call with function calling
-        try:
-            print("Making API call to DeepSeek...")  # Debug log
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=messages,
-                tools=self.tools,
-                tool_choice="auto",
-                timeout=30  # 30 seconds timeout
-            )
-            print("API call successful!")  # Debug log
-            
-            message = response.choices[0].message
-            
-            # Handle function calls
-            if message.tool_calls:
-                # Add assistant message with tool calls to history
-                assistant_message = {
-                    "role": "assistant",
-                    "content": message.content,
-                    "tool_calls": [
-                        {
-                            "id": tool_call.id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_call.function.name,
-                                "arguments": tool_call.function.arguments
-                            }
-                        } for tool_call in message.tool_calls
-                    ]
-                }
-                self.conversation_history.append(assistant_message)
-                
-                # Execute function calls and add results
-                should_clear_history = False
-                for tool_call in message.tool_calls:
-                    function_name = tool_call.function.name
-                    parameters = json.loads(tool_call.function.arguments)
-                    result = self.execute_function(function_name, parameters)
-                    
-                    # Check if we should clear history after this operation
-                    if isinstance(result, dict) and result.get("clear_history"):
-                        should_clear_history = True
-                    
-                    # Add function result to conversation
-                    self.conversation_history.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": json.dumps(result)
-                    })
-                
-                # Get final response after function execution
-                final_response = self.client.chat.completions.create(
+        # Retry mechanism for API calls
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                print("Making API call to DeepSeek...")  # Debug log
+                response = self.client.chat.completions.create(
                     model="deepseek-chat",
-                    messages=[system_message] + self.conversation_history,
+                    messages=messages,
                     tools=self.tools,
-                    tool_choice="auto"
+                    tool_choice="auto",
+                    timeout=45  # Increased timeout to 45 seconds
                 )
+                print("API call successful!")  # Debug log
                 
-                final_message = final_response.choices[0].message
+                message = response.choices[0].message
                 
-                # Add final response to history
-                final_assistant_message = {
-                    "role": "assistant",
-                    "content": final_message.content
-                }
-                self.conversation_history.append(final_assistant_message)
+                # Check if the response is empty or None
+                if not message.content and not message.tool_calls:
+                    print(f"Empty response received on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        print(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        return "I apologize, but I'm having trouble generating a response right now. Please try asking your question again, or contact support at nailfec17@gmail.com for assistance."
                 
-                # Clear history if requested (after successful booking/cancellation)
-                if should_clear_history:
-                    self.clear_conversation_history()
+                # Handle function calls
+                if message.tool_calls:
+                    print(f"Processing {len(message.tool_calls)} tool calls...")
+                    
+                    # Add assistant message with tool calls to history
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": message.content,
+                        "tool_calls": [
+                            {
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments
+                                }
+                            } for tool_call in message.tool_calls
+                        ]
+                    }
+                    self.conversation_history.append(assistant_message)
+                    
+                    # Execute function calls and add results
+                    should_clear_history = False
+                    for i, tool_call in enumerate(message.tool_calls):
+                        function_name = tool_call.function.name
+                        parameters = json.loads(tool_call.function.arguments)
+                        print(f"Executing function {i+1}/{len(message.tool_calls)}: {function_name}")
+                        
+                        result = self.execute_function(function_name, parameters)
+                        print(f"Function {function_name} completed with result type: {type(result)}")
+                        
+                        # Check if we should clear history after this operation
+                        if isinstance(result, dict) and result.get("clear_history"):
+                            should_clear_history = True
+                        
+                        # Add function result to conversation
+                        self.conversation_history.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": json.dumps(result)
+                        })
+                    
+                    # Get final response after function execution with retry
+                    final_response_content = None
+                    for final_attempt in range(max_retries):
+                        try:
+                            print(f"Getting final response after function execution (attempt {final_attempt + 1})...")
+                            final_response = self.client.chat.completions.create(
+                                model="deepseek-chat",
+                                messages=[system_message] + self.conversation_history,
+                                tools=self.tools,
+                                tool_choice="auto",
+                                timeout=45
+                            )
+                            
+                            final_message = final_response.choices[0].message
+                            print(f"Final response received: {final_message.content[:100] if final_message.content else 'None'}...")
+                            
+                            # Handle additional tool calls in final response
+                            if final_message.tool_calls:
+                                print(f"Final response contains {len(final_message.tool_calls)} additional tool calls, executing them...")
+                                
+                                # Add the assistant message with tool calls
+                                if final_message.content:
+                                    self.conversation_history.append({
+                                        "role": "assistant",
+                                        "content": final_message.content,
+                                        "tool_calls": [
+                                            {
+                                                "id": tc.id,
+                                                "type": "function",
+                                                "function": {
+                                                    "name": tc.function.name,
+                                                    "arguments": tc.function.arguments
+                                                }
+                                            } for tc in final_message.tool_calls
+                                        ]
+                                    })
+                                
+                                # Execute additional tool calls
+                                for tc in final_message.tool_calls:
+                                    try:
+                                        func_name = tc.function.name
+                                        func_params = json.loads(tc.function.arguments)
+                                        func_result = self.execute_function(func_name, func_params)
+                                        
+                                        self.conversation_history.append({
+                                            "role": "tool",
+                                            "tool_call_id": tc.id,
+                                            "content": json.dumps(func_result)
+                                        })
+                                    except Exception as tc_e:
+                                        print(f"Error in additional tool call {func_name}: {str(tc_e)}")
+                                        self.conversation_history.append({
+                                            "role": "tool",
+                                            "tool_call_id": tc.id,
+                                            "content": json.dumps({"error": str(tc_e)})
+                                        })
+                                
+                                # Get another response after additional tool calls
+                                if final_attempt < max_retries - 1:
+                                    continue
+                                else:
+                                    final_response_content = "I've completed the function calls, but need to generate a final response. Please ask me again if you need more information."
+                                    break
+                            
+                            # Check if final response is empty
+                            elif not final_message.content or final_message.content.strip() == "":
+                                print(f"Empty final response on attempt {final_attempt + 1}")
+                                if final_attempt < max_retries - 1:
+                                    print(f"Retrying final response in {retry_delay} seconds...")
+                                    time.sleep(retry_delay)
+                                    continue
+                                else:
+                                    # Force a non-empty response
+                                    final_response_content = "I've processed your request successfully. If you need more information, please let me know!"
+                                    break
+                            else:
+                                final_response_content = final_message.content
+                                break
+                            
+                        except Exception as final_e:
+                            print(f"Final response API error on attempt {final_attempt + 1}: {str(final_e)}")
+                            if final_attempt < max_retries - 1:
+                                print(f"Retrying in {retry_delay} seconds...")
+                                time.sleep(retry_delay)
+                                continue
+                            else:
+                                final_response_content = f"I've processed your request, but encountered an error generating the response: {str(final_e)}. Please try again or contact support at nailfec17@gmail.com."
+                                break
+                    
+                    # Ensure we always have a response
+                    if not final_response_content:
+                        final_response_content = "I've processed your request successfully. Please let me know if you need anything else!"
+                    
+                    # Add final response to history
+                    final_assistant_message = {
+                        "role": "assistant",
+                        "content": final_response_content
+                    }
+                    self.conversation_history.append(final_assistant_message)
+                    
+                    # Clear history if requested (after successful booking/cancellation)
+                    if should_clear_history:
+                        self.clear_conversation_history()
+                    
+                    print(f"Returning final response: {final_response_content[:100]}...")
+                    return final_response_content
                 
-                return final_message.content
-            
-            else:
-                # No function calls, just add response to history
-                assistant_message = {
-                    "role": "assistant",
-                    "content": message.content
-                }
-                self.conversation_history.append(assistant_message)
-                return message.content
-                
-        except Exception as e:
-            print(f"AI API Error: {str(e)}")  # Add debug log
-            import traceback
-            traceback.print_exc()  # Print full error stack
-            
-            # Provide fallback response
-            if "timeout" in str(e).lower() or "connection" in str(e).lower():
-                return "AI service is responding slowly at the moment, please try again later. You can also email nailfec17@gmail.com for human assistance."
-            elif "api" in str(e).lower() or "key" in str(e).lower():
-                return "AI service configuration issue, please contact administrator. Email: nailfec17@gmail.com"
-            else:
-                return f"Sorry, I encountered a technical issue: {str(e)}. Please try again later or contact support team: nailfec17@gmail.com"
+                else:
+                    # No function calls, check for empty content
+                    if not message.content or message.content.strip() == "":
+                        print(f"Empty direct response on attempt {attempt + 1}")
+                        if attempt < max_retries - 1:
+                            print(f"Retrying in {retry_delay} seconds...")
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            return "I apologize, but I'm having trouble generating a response right now. Please try rephrasing your question or contact support at nailfec17@gmail.com for assistance."
+                    
+                    # Add response to history
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": message.content
+                    }
+                    self.conversation_history.append(assistant_message)
+                    return message.content
+                    
+            except Exception as e:
+                print(f"AI API Error on attempt {attempt + 1}: {str(e)}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    traceback.print_exc()  # Print full error stack for last attempt
+                    
+                    # Provide fallback response
+                    if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                        return "AI service is responding slowly at the moment, please try again later. You can also email nailfec17@gmail.com for human assistance."
+                    elif "api" in str(e).lower() or "key" in str(e).lower():
+                        return "AI service configuration issue, please contact administrator. Email: nailfec17@gmail.com"
+                    else:
+                        return f"Sorry, I encountered a technical issue: {str(e)}. Please try again later or contact support team: nailfec17@gmail.com"
+        
+        # This should never be reached, but added as a safety net
+        return "I'm experiencing technical difficulties. Please try again or contact support at nailfec17@gmail.com."
 
     def chat(self):
         """Main chat loop"""
