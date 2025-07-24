@@ -22,7 +22,7 @@ class HPC_ChatBot:
         self.client = OpenAI(
             api_key=nailfec.api_key,
             base_url="https://api.deepseek.com",
-            timeout=30.0  # 添加30秒超时
+            timeout=30.0  # Adding 30 seconds timeout
         )
         
         # Load GPU inventory and bookings data
@@ -1437,15 +1437,15 @@ CRITICAL FUNCTION CALLING RULES:
         
         # Make API call with function calling
         try:
-            print("Making API call to DeepSeek...")  # 调试日志
+            print("Making API call to DeepSeek...")  # Debug log
             response = self.client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 tools=self.tools,
                 tool_choice="auto",
-                timeout=30  # 30秒超时
+                timeout=30  # 30 seconds timeout
             )
-            print("API call successful!")  # 调试日志
+            print("API call successful!")  # Debug log
             
             message = response.choices[0].message
             
@@ -1519,17 +1519,17 @@ CRITICAL FUNCTION CALLING RULES:
                 return message.content
                 
         except Exception as e:
-            print(f"AI API Error: {str(e)}")  # 添加调试日志
+            print(f"AI API Error: {str(e)}")  # Add debug log
             import traceback
-            traceback.print_exc()  # 打印完整错误堆栈
+            traceback.print_exc()  # Print full error stack
             
-            # 提供备用响应
+            # Provide fallback response
             if "timeout" in str(e).lower() or "connection" in str(e).lower():
-                return "⚠️ AI服务暂时响应较慢，请稍后重试。您也可以发送邮件到 nailfec17@gmail.com 寻求人工帮助。"
+                return "AI service is responding slowly at the moment, please try again later. You can also email nailfec17@gmail.com for human assistance."
             elif "api" in str(e).lower() or "key" in str(e).lower():
-                return "⚠️ AI服务配置问题，请联系管理员。邮箱：nailfec17@gmail.com"
+                return "AI service configuration issue, please contact administrator. Email: nailfec17@gmail.com"
             else:
-                return f"⚠️ 抱歉，我遇到了技术问题：{str(e)}。请稍后重试或联系支持团队：nailfec17@gmail.com"
+                return f"Sorry, I encountered a technical issue: {str(e)}. Please try again later or contact support team: nailfec17@gmail.com"
 
     def chat(self):
         """Main chat loop"""

@@ -10,22 +10,21 @@ import os
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-# 初始化 Redis 连接 (可选，如果没有Redis则使用内存)
+# Initialize Redis connection (optional, use memory if Redis unavailable)
 try:
     redis_client = redis.Redis(host='localhost', port=6379, db=0)
-    redis_client.ping()  # 测试连接
+    redis_client.ping()
     USE_REDIS = True
-    print("✅ Redis连接成功 - 启用会话持久化")
+    print("Redis connected successfully - Session persistence enabled")
 except:
     USE_REDIS = False
-    print("⚠️  Redis未连接 - 使用内存存储 (重启后会话丢失)")
+    print("Redis not connected - Using memory storage (sessions lost on restart)")
 
 lock = Lock()
-memory_sessions = {}  # 内存存储备用
+memory_sessions = {}
 
 def get_or_create_chatbot(session_id):
-    """获取或创建新的 chatbot 实例"""
-    # 检查是否已有实例
+    """Get or create new chatbot instance"""
     if USE_REDIS:
         try:
             chatbot_pickle = redis_client.get(f'chatbot:{session_id}')
@@ -37,48 +36,41 @@ def get_or_create_chatbot(session_id):
         if session_id in memory_sessions:
             return memory_sessions[session_id]
     
-    # 创建新实例
     chatbot = HPC_ChatBot(session_id)
     save_chatbot(session_id, chatbot)
     return chatbot
 
 def save_chatbot(session_id, chatbot):
-    """保存 chatbot 状态"""
+    """Save chatbot state"""
     if USE_REDIS:
         redis_client.setex(f'chatbot:{session_id}', 3600, pickle.dumps(chatbot))
     else:
         memory_sessions[session_id] = chatbot
 
-# ===============================
-# 前端页面路由
-# ===============================
 @app.route('/')
 def home():
-    """主页 - 聊天界面"""
+    """Main page - Chat interface"""
     return send_file('chat_interface.html')
 
 @app.route('/dashboard')
 def dashboard():
-    """数据仪表板"""
+    """Data dashboard"""
     return send_file('timeline_dashboard.html')
 
 @app.route('/test')
 def test_chat():
-    """简单聊天测试页面"""
+    """Simple chat test page"""
     return send_file('test_chat.html')
 
 @app.route('/favicon.ico')
 def favicon():
-    """网站图标"""
+    """Website icon"""
     return send_file('favicon.ico')
 
-# ===============================
-# 聊天API (支持会话管理)
-# ===============================
 @app.route('/chat', methods=['POST'])
 @app.route('/api/chat', methods=['POST'])
 def chat_with_session():
-    """带会话管理的聊天API"""
+    """Chat API with session management"""
     try:
         if 'session_id' not in session:
             session['session_id'] = secrets.token_hex(16)
@@ -99,12 +91,9 @@ def chat_with_session():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# ===============================
-# RESTful API (无会话，直接调用)
-# ===============================
 @app.route('/api/direct/chat', methods=['POST'])
 def direct_chat():
-    """无会话的直接聊天API"""
+    """Direct chat API without session"""
     data = request.get_json()
     if not data or 'message' not in data:
         return jsonify({'error': 'No message provided'}), 400
@@ -118,7 +107,7 @@ def direct_chat():
 
 @app.route('/api/search_gpus')
 def search_gpus():
-    """搜索可用GPU"""
+    """Search available GPUs"""
     try:
         chatbot = HPC_ChatBot()
         result = chatbot.search_available_gpus(
@@ -133,7 +122,7 @@ def search_gpus():
 
 @app.route('/api/recommendations')
 def get_recommendations():
-    """获取GPU推荐"""
+    """Get GPU recommendations"""
     use_case = request.args.get('use_case', '')
     if not use_case:
         return jsonify({'error': 'Use case is required'}), 400
@@ -149,12 +138,9 @@ def get_recommendations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ===============================
-# 数据API
-# ===============================
 @app.route('/api/gpu_inventory')
 def get_gpu_inventory():
-    """获取GPU库存"""
+    """Get GPU inventory"""
     try:
         with open('gpu_inventory.json', 'r') as f:
             return jsonify(json.load(f))
@@ -163,7 +149,7 @@ def get_gpu_inventory():
 
 @app.route('/api/bookings')
 def get_bookings():
-    """获取预订数据"""
+    """Get booking data"""
     try:
         with open('bookings.json', 'r') as f:
             return jsonify(json.load(f))
@@ -172,19 +158,16 @@ def get_bookings():
 
 @app.route('/api/current_datetime')
 def get_current_datetime():
-    """获取当前时间"""
+    """Get current time"""
     try:
         chatbot = HPC_ChatBot()
         return jsonify(chatbot.get_current_datetime())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ===============================
-# 会话管理
-# ===============================
 @app.route('/api/session/clear', methods=['POST'])
 def clear_session():
-    """清除当前会话"""
+    """Clear current session"""
     if 'session_id' in session:
         session_id = session['session_id']
         if USE_REDIS:
@@ -194,12 +177,9 @@ def clear_session():
         session.clear()
     return jsonify({'message': 'Session cleared'})
 
-# ===============================
-# 调试和监控
-# ===============================
 @app.route('/debug/history')
 def debug_history():
-    """查看对话历史"""
+    """View conversation history"""
     if 'session_id' not in session:
         return jsonify({'error': 'No active session found'})
     
@@ -218,7 +198,7 @@ def debug_history():
 
 @app.route('/debug/sessions')
 def debug_sessions():
-    """查看所有活跃会话"""
+    """View all active sessions"""
     if USE_REDIS:
         try:
             keys = redis_client.keys('chatbot:*')
@@ -234,41 +214,41 @@ def debug_sessions():
 
 @app.route('/api/')
 def api_docs():
-    """API文档"""
+    """API documentation"""
     return jsonify({
         "version": "2.1",
         "session_apis": {
-            "/api/chat": "POST - 带会话的聊天",
-            "/api/session/clear": "POST - 清除会话"
+            "/api/chat": "POST - Chat with session",
+            "/api/session/clear": "POST - Clear session"
         },
         "direct_apis": {
-            "/api/direct/chat": "POST - 无会话聊天",
-            "/api/search_gpus": "GET - 搜索GPU",
-            "/api/recommendations": "GET - GPU推荐",
-            "/api/gpu_inventory": "GET - GPU库存",
-            "/api/bookings": "GET - 预订数据",
-            "/api/current_datetime": "GET - 当前时间"
+            "/api/direct/chat": "POST - Chat without session",
+            "/api/search_gpus": "GET - Search GPUs",
+            "/api/recommendations": "GET - GPU recommendations",
+            "/api/gpu_inventory": "GET - GPU inventory",
+            "/api/bookings": "GET - Booking data",
+            "/api/current_datetime": "GET - Current time"
         },
         "debug_apis": {
-            "/debug/history": "GET - 查看对话历史",
-            "/debug/sessions": "GET - 查看活跃会话"
+            "/debug/history": "GET - View conversation history",
+            "/debug/sessions": "GET - View active sessions"
         },
         "pages": {
-            "/": "聊天界面",
-            "/dashboard": "数据仪表板"
+            "/": "Chat interface",
+            "/dashboard": "Data dashboard"
         }
     })
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("  🚀 SK HPC Services - 统一服务器")
+    print("  SK HPC Services - Unified Server")
     print("=" * 60)
-    print(f"💾 存储模式: {'Redis (持久化)' if USE_REDIS else '内存 (临时)'}")
-    print("🌐 服务地址:")
-    print("   - 聊天界面: http://localhost:5000")
-    print("   - 数据仪表板: http://localhost:5000/dashboard")
-    print("   - API文档: http://localhost:5000/api/")
-    print("   - 调试接口: http://localhost:5000/debug/history")
+    print(f"Storage mode: {'Redis (persistent)' if USE_REDIS else 'Memory (temporary)'}")
+    print("Service URLs:")
+    print("   - Chat interface: http://localhost:5000")
+    print("   - Data dashboard: http://localhost:5000/dashboard")
+    print("   - API docs: http://localhost:5000/api/")
+    print("   - Debug interface: http://localhost:5000/debug/history")
     print("=" * 60)
     
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)

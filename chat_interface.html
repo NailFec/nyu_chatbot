@@ -510,11 +510,11 @@
             
             if (!response.ok) {
                 if (response.status === 503) {
-                    throw new Error('服务暂时不可用，请稍后重试');
+                    throw new Error('Service temporarily unavailable, please try again later');
                 } else if (response.status === 400) {
-                    throw new Error('请求无效，请检查您的输入');
+                    throw new Error('Invalid request, please check your input');
                 } else {
-                    throw new Error('网络或服务器错误，请重试');
+                    throw new Error('Network or server error, please retry');
                 }
             }
             
@@ -527,7 +527,7 @@
                 return await callChatAPI(message);
             } catch (error) {
                 console.error('Chat API error:', error);
-                return `抱歉，出现了错误：${error.message}。请稍后重试或联系支持团队。`;
+                return `Sorry, an error occurred: ${error.message}. Please try again later or contact support.`;
             }
         }
     </script>
