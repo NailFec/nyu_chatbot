@@ -22,24 +22,18 @@ class HPC_ChatBot:
         self.client = OpenAI(
             api_key=nailfec.api_key,
             base_url="https://api.deepseek.com",
-            timeout=30.0  # Adding 30 seconds timeout
+            timeout=30.0
         )
         
-        # Load GPU inventory and bookings data
         with open('gpu_inventory.json', 'r') as f:
             self.gpu_data = json.load(f)
         
         with open('bookings.json', 'r') as f:
             self.bookings = json.load(f)
         
-        # Session-specific conversation history
         self.session_id = session_id or hashlib.md5(str(datetime.datetime.now()).encode()).hexdigest()
         self.conversation_history = []
-        
-        # Current booking session data
         self.current_booking = {}
-        
-        # Pending operations awaiting confirmation
         self.pending_operation = None
         self.pending_data = {}
         
@@ -879,23 +873,14 @@ class HPC_ChatBot:
     def display_booking_card(self, booking: Dict, is_cancelled: bool = False):
         """Generate and display booking card in browser"""
         try:
-            # Generate card data using AI
             card_data = self.generate_booking_card_data(booking, is_cancelled)
-            
-            # Generate HTML
             html_content = self.generate_booking_card_html(card_data)
             
-            # Save to temporary file and open in browser
             with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
                 f.write(html_content)
                 temp_file = f.name
             
-            # Open in default browser
             webbrowser.open(f'file://{temp_file}')
-            
-            # Clean up after a delay (optional)
-            # Note: In a real application, you might want to manage this differently
-            
             return True
             
         except Exception as e:
@@ -1172,7 +1157,6 @@ Please review the booking you want to cancel:
             return {"success": False, "message": "No pending operation to confirm"}
         
         if not confirmed:
-            # User declined, clear pending operation
             operation_type = self.pending_operation
             self.pending_operation = None
             self.pending_data = {}
@@ -1182,29 +1166,36 @@ Please review the booking you want to cancel:
                 "cancelled": True
             }
         
-        # User confirmed, execute the operation
-        if self.pending_operation == "booking":
-            result = self._execute_confirmed_booking()
-        elif self.pending_operation == "cancellation":
-            result = self._execute_confirmed_cancellation()
-        else:
-            return {"success": False, "message": f"Unknown operation type: {self.pending_operation}"}
-        
-        # Clear pending operation
-        self.pending_operation = None
-        self.pending_data = {}
-        
-        return result
+        try:
+            if self.pending_operation == "booking":
+                result = self._execute_confirmed_booking()
+            elif self.pending_operation == "cancellation":
+                result = self._execute_confirmed_cancellation()
+            else:
+                return {"success": False, "message": f"Unknown operation type: {self.pending_operation}"}
+            
+            if result.get("success") and result.get("clear_history"):
+                self.clear_conversation_history()
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error executing operation: {str(e)}",
+                "clear_history": False
+            }
+        finally:
+            self.pending_operation = None
+            self.pending_data = {}
 
     def _execute_confirmed_booking(self) -> Dict:
         """Execute the confirmed booking operation"""
         data = self.pending_data
         
-        # Generate booking ID and hash
         booking_id = f"book_{len(self.bookings) + 1:03d}"
         booking_hash = hashlib.md5(f"{booking_id}{data['user_email']}{data['start_time']}".encode()).hexdigest()
         
-        # Create booking
         new_booking = {
             "booking_id": booking_id,
             "booking_hash": booking_hash,
@@ -1224,21 +1215,27 @@ Please review the booking you want to cancel:
             "overtime_cost": 0.00
         }
         
-        self.bookings.append(new_booking)
-        
-        # Save to file
-        with open('bookings.json', 'w') as f:
-            json.dump(self.bookings, f, indent=2)
-        
-        # Display booking card
-        self.display_booking_card(new_booking, is_cancelled=False)
-        
-        return {
-            "success": True,
-            "booking": new_booking,
-            "message": "Booking created successfully! A booking card has been generated and opened in your browser.",
-            "clear_history": True
-        }
+        try:
+            self.bookings.append(new_booking)
+            
+            with open('bookings.json', 'w') as f:
+                json.dump(self.bookings, f, indent=2)
+            
+            card_displayed = self.display_booking_card(new_booking, is_cancelled=False)
+            
+            return {
+                "success": True,
+                "booking": new_booking,
+                "message": f"Booking created successfully! Booking ID: {booking_id}, Hash: {booking_hash[:8]}... Card displayed: {card_displayed}",
+                "clear_history": True,
+                "card_displayed": card_displayed
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error creating booking: {str(e)}",
+                "clear_history": False
+            }
 
     def _execute_confirmed_cancellation(self) -> Dict:
         """Execute the confirmed cancellation operation"""
@@ -1246,26 +1243,35 @@ Please review the booking you want to cancel:
         booking_hash = data["booking_hash"]
         user_email = data["user_email"]
         
-        # Find and cancel the booking
-        for i, booking in enumerate(self.bookings):
-            if (booking["booking_hash"] == booking_hash and 
-                booking["user_email"] == user_email):
-                self.bookings[i]["status"] = "cancelled"
-                
-                # Save to file
-                with open('bookings.json', 'w') as f:
-                    json.dump(self.bookings, f, indent=2)
-                
-                # Display cancellation card
-                self.display_booking_card(self.bookings[i], is_cancelled=True)
-                
-                return {
-                    "success": True,
-                    "message": "Booking cancelled successfully! A cancellation card has been generated and opened in your browser.",
-                    "clear_history": True
-                }
-        
-        return {"success": False, "message": "Booking not found during cancellation"}
+        try:
+            for i, booking in enumerate(self.bookings):
+                if (booking["booking_hash"] == booking_hash and 
+                    booking["user_email"] == user_email):
+                    self.bookings[i]["status"] = "cancelled"
+                    
+                    with open('bookings.json', 'w') as f:
+                        json.dump(self.bookings, f, indent=2)
+                    
+                    card_displayed = self.display_booking_card(self.bookings[i], is_cancelled=True)
+                    
+                    return {
+                        "success": True,
+                        "message": f"Booking {booking_hash[:8]}... cancelled successfully! Card displayed: {card_displayed}",
+                        "clear_history": True,
+                        "card_displayed": card_displayed
+                    }
+            
+            return {
+                "success": False,
+                "message": "Booking not found during cancellation",
+                "clear_history": False
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error cancelling booking: {str(e)}",
+                "clear_history": False
+            }
 
     def clear_conversation_history(self) -> Dict:
         """Clear the conversation history to start fresh"""
@@ -1346,10 +1352,8 @@ Please review the booking you want to cancel:
 
     def send_message_to_ai(self, user_message: str) -> str:
         """Send message to AI and get response"""
-        # Add user message to conversation history
         self.conversation_history.append({"role": "user", "content": user_message})
         
-        # Prepare system message
         system_message = {
             "role": "system",
             "content": """You are an AI assistant for SK (Shame Kitten) HPC Services, a company that provides high-performance computing GPU rental services.
@@ -1413,23 +1417,18 @@ CONFIRMATION WORKFLOW (CRITICAL):
 - After showing the confirmation, ask the user to confirm with 'yes'/'confirm' or decline with 'no'
 - When user responds with confirmation intent, call confirm_operation with confirmed=true
 - When user declines, call confirm_operation with confirmed=false
-- After successful operations (booking/cancellation), the conversation history will be cleared automatically
+- After successful operations (booking/cancellation), the system will automatically display cards, update JSON files, and clear conversation history
 - If user wants to modify details after seeing confirmation, collect new details and show confirmation again
 
 USER CONFIRMATION PATTERNS:
-- Confirmation: "yes", "confirm", "proceed", "do it", "go ahead", "that's correct", "looks good", "confirm"
-- Decline: "no", "cancel", "stop", "wait", "not correct", "change", "modify", "wait", "i want ... to be ..."
+- Confirmation: "yes", "confirm", "proceed", "do it", "go ahead", "that's correct", "looks good"
+- Decline: "no", "cancel", "stop", "wait", "not correct", "change", "modify"
 
 CRITICAL FUNCTION CALLING RULES:
 - ALWAYS call search_available_gpus when users ask about availability, quantities, or "how many" GPUs are available
-- ALWAYS include the specific GPU model (e.g., "RTX-3080") when searching
+- ALWAYS include the specific GPU model when searching
 - When users mention specific dates/times for booking, ALWAYS include start_time and end_time in the search to check real availability
-- Never give availability information without calling the search function first
-- Examples requiring search_available_gpus:
-  * "how many 3080 available"
-  * "are RTX-4090s available"
-  * "check availability for July 22-25"
-  * "what GPUs are free this week" """
+- Never give availability information without calling the search function first"""
         }
         
         # Prepare messages for API call
@@ -1437,21 +1436,18 @@ CRITICAL FUNCTION CALLING RULES:
         
         # Make API call with function calling
         try:
-            print("Making API call to DeepSeek...")  # Debug log
             response = self.client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 tools=self.tools,
                 tool_choice="auto",
-                timeout=30  # 30 seconds timeout
+                timeout=30
             )
-            print("API call successful!")  # Debug log
             
             message = response.choices[0].message
             
             # Handle function calls
             if message.tool_calls:
-                # Simplify the process of adding assistant messages to history
                 self.conversation_history.append({
                     "role": "assistant",
                     "content": message.content,
@@ -1464,23 +1460,17 @@ CRITICAL FUNCTION CALLING RULES:
                     ]
                 })
                 
-                # Optimize function calls and result processing
-                should_clear_history = False
                 for tool_call in message.tool_calls:
-                    # Directly get function name and parameters
                     function_name = tool_call.function.name
                     parameters = json.loads(tool_call.function.arguments)
                     result = self.execute_function(function_name, parameters)
                     
-                    # Check if history needs to be cleared and add results to conversation history
-                    should_clear_history = should_clear_history or (isinstance(result, dict) and result.get("clear_history", False))
                     self.conversation_history.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": json.dumps(result)
                     })
                 
-                # Get final response
                 final_response = self.client.chat.completions.create(
                     model="deepseek-chat",
                     messages=[system_message] + self.conversation_history,
@@ -1491,14 +1481,9 @@ CRITICAL FUNCTION CALLING RULES:
                 final_message = final_response.choices[0].message
                 self.conversation_history.append({"role": "assistant", "content": final_message.content})
                 
-                # If history needs to be cleared, call the method directly
-                if should_clear_history:
-                    self.clear_conversation_history()
-                
                 return final_message.content
             
             else:
-                # No function calls, just add response to history
                 assistant_message = {
                     "role": "assistant",
                     "content": message.content
@@ -1507,11 +1492,6 @@ CRITICAL FUNCTION CALLING RULES:
                 return message.content
                 
         except Exception as e:
-            print(f"AI API Error: {str(e)}")  # Add debug log
-            import traceback
-            traceback.print_exc()  # Print full error stack
-            
-            # Provide fallback response
             if "timeout" in str(e).lower() or "connection" in str(e).lower():
                 return "AI service is responding slowly at the moment, please try again later. You can also email nailfec17@gmail.com for human assistance."
             elif "api" in str(e).lower() or "key" in str(e).lower():
